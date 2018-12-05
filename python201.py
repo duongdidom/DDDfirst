@@ -6,17 +6,17 @@ from datetime import datetime, date, timedelta   # import datetime module to con
 import shutil   # import shutil module to copy file
 
 # define start date and end date
-startD = "04/09/2017" 
-endD = "05/09/2017"
+startD = "09/11/2018" 
+endD = "10/11/2018"
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
-parent_dir = r"C:\Users\DDD\Downloads\Test"    # insert r before a string so that python interprete string as raw
+parent_dir = r"C:\Users\douglas.cao\Google Drive\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
 
 #1. Collect input files:
 def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execution time
     out_timestamp = yyyymmdd + "-" + hhmmss + "_"
 
-    #1.1. find latest pa2 and position file then copy it to output folder
+    ### 1.1. find latest pa2 and position file then copy it to output folder
     os.chdir(parent_dir + r"\in")    # define new working directory = where input files are 
 
     latest_pa2 = max(glob.iglob("NZX." + yyyymmdd + "*.pa2"), key = os.path.getmtime) # find the latest modified file with specified format
@@ -30,28 +30,44 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
     shutil.copy(os.getcwd() + "\\" + latest_pa2, pa2File) # copy() function copies from source to destination
     shutil.copy(os.getcwd() + "\\" + latest_position, posistionFile) # copy latest pa2 and position file in input folder to output folder
 
-    #1.2. define a bunch of newly created files
+    ### 1.2. find constant files and copy them to output folder
+    # path and filename for cons files
+    cons_rc_intercomm_csv =  parent_dir + r"\\cons\\cons_rc_intercomm.csv"
+    cons_rc_intermonth_csv =  parent_dir + r"\\cons\\cons_rc_intermonth.csv"
+    cons_rc_scan_csv =  parent_dir + r"\\cons\\cons_rc_scan.csv"
+    cons_house_csv = parent_dir + r"\\cons\\cons_house.csv"
+
+    # path and filenames for cons files in output folder = original + timestamp
+    rc_intercomm_csv =  parent_dir + r"\\out\\" + out_timestamp + r"rc_intercomm.csv"
+    rc_intermonth_csv =  parent_dir + r"\\out\\" + out_timestamp + r"rc_intermonth.csv"
+    rc_scan_csv =  parent_dir + r"\\out\\" + out_timestamp + r"rc_scan.csv"
+    house_csv = parent_dir + r"\\out\\" + out_timestamp + r"house.csv"
+
+    # copy from cons folder to output folder
+    try:
+        shutil.copy(cons_rc_intercomm_csv,rc_intercomm_csv)
+        shutil.copy(cons_rc_intermonth_csv,rc_intermonth_csv)
+        shutil.copy(cons_rc_scan_csv,rc_scan_csv)
+        shutil.copy(cons_house_csv,house_csv)
+    except Exception as err:
+        print (err)     # try grouping all of copying tasks into one
+
+    ### 1.3. define a bunch of newly created files
     # Modified files
-    new_pa2_file = out_timestamp + r"new.pa2"
-    sum_position_file =  out_timestamp + r"sum.txt"
-    # Constant files
-    cons_rc_intercomm_file =  parent_dir + r"\\out\\" + r"rc_intercomm.csv"
-    cons_rc_intermonth_file =  parent_dir + r"\\out\\" + r"rc_intermonth.csv"
-    cons_rc_scan_file =  parent_dir + r"\\out\\" + r"rc_scan.csv"
-    cons_house_file = parent_dir + r"\\out\\" + r"house.csv"
+    new_pa2 = out_timestamp + r"new.pa2"
+    sum_position_txt =  out_timestamp + r"sum.txt"
+    
     # Newly created files
-    whatif_file =  out_timestamp + r"whatif.xml"
-    rc_intercomm_file =  out_timestamp + r"rc_intercomm.csv"
-    rc_intermonth_file =  out_timestamp + r"rc_intermonth.csv"
-    rc_scan_file =  out_timestamp + r"rc_scan.csv"
-    house_file = out_timestamp + r"house.csv"
+    whatif_xml =  out_timestamp + r"whatif.xml"
     # Leave out file extension to add identifier in write_margin/rc_spanit function
-    spanit_script = out_timestamp + r"spanit_" 
+    spanit_txt = out_timestamp + r"spanit_" 
     # Leave out file extension to add identifier in write_margin/rc_spanit function
-    span_file = out_timestamp + r"span_" 
+    span_spn = out_timestamp + r"span_" 
     # Leave out file extension to add identifier in call_span_report function
-    pbreq_csv_file =  out_timestamp + r"pbreq_" 
-    final_file = out_timestamp + r"final.csv"
+    pbreq_csv =  out_timestamp + r"pbreq_" 
+    final_csv = out_timestamp + r"final.csv"
+
+    return (pa2File, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv)
 
 ############################### MAIN ###############################
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
