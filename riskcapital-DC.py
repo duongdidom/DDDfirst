@@ -1210,7 +1210,7 @@ dates = [startD + datetime.timedelta(days=x) for x in range(0, (endD-startD).day
 def main():
     for date in dates:
         yyyymmdd= date.strftime("%Y%m%d")
-        print yyyymmdd
+        print (yyyymmdd)
 
         # Make log
         hhmmss = write_log()     # no longer return yyyymmdd, hhmmss variable    # yyyymmdd, hhmmss = write_log()

@@ -82,3 +82,14 @@
 # to uninstall: use 'pip uninstall python-docx' for example
 
 # inheritance: create a class that has all attributes of the existing class
+
+############################################################################################################################################################################
+# working with datetime module
+from datetime import timedelta, date
+
+start_date = date(2013, 1, 1)
+end_date = date(2013, 1, 10)
+
+for x in range(0, (end_date-start_date).days):  # loop from 0 to number of days from start date to end date. 
+                                                # range() function excludes end date
+        print (start_date + timedelta(x))       # for each loop, convert x from inteter to date using timedelta. Plus that number to start date
