@@ -78,29 +78,32 @@ def read_pa2(pa2File):
     return (pa2_list)
 
 ### 2.2. retrieve and store
-def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break down by record type and store them into several dictionaries
-    ### 2.2.1. create bunch of dictionary to store data
+def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break down by record type and store them into several lists
+    ### 2.2.1. create bunch of lists to store data
     price_list = []             # for future prices    
     price_param_list = []       # calculation parameter    
-    intermonth_dict = []        # intermonth spread charge
-    intermonth_param_dict = []  # intermonth parameter details
-    intercomm_dict = []         # intercommodity spread charge
-    intercomm_param_dict = []   # intercommodity parameter details
-    instrument_dict = []        # instrument type & maturity
-    option_dict = []            # option prices and delta
-    deltascale_dict = []        # instrument type, maturity & delta scaling factor
-    currency_dict = []          # currency    
+    intermonth_list = []        # intermonth spread charge
+    intermonth_param_list = []  # intermonth parameter details
+    intercomm_list = []         # intercommodity spread charge
+    intercomm_param_list = []   # intercommodity parameter details
+    instrument_list = []        # instrument type & maturity
+    deltascale_list = []        # instrument type, maturity & delta scaling factor
+    option_list = []            # option prices and delta    
+    currency_list = []          # currency    
     
     for line in pa2_list:
-        # price_dict = dictionary of futures prices [commodity, type, maturity, price] eg ['WMP','FUT',201801,31200]
+        # price_list = list of futures prices [commodity, type, maturity, price]
+        # eg ['WMP','FUT',201801,31200]
         if line.startswith("82") and (str(line[25:28]) == "FUT" or str(line[25:28]) == "PHY"):
             price_list.append({
-            'comm':str(line[5:15]).strip(),
+            'comm':str(line[5:15]).strip(),    # strip() remove any space character
             'instype':str(line[25:28]),
-            'maturity':int(line[29:35].strip() or 0), 
+            'maturity':int(line[29:35].strip() or 0),  # if result is blank string after stripping, will take value 0 to be able to convert to integer
             'dsp':float(line[110:117].strip() or 0)
             })
 
+        # list of all calc parameters [commodity, type, settlement price decimal locator, contract value factor, strike price decimal locator,currency] 
+        # eg ['MKP','OOF',2,6000,2,'NZD'] 
         elif line.startswith("P"):
             price_param_list.append({
             'comm':str(line[5:15]).strip(),
@@ -111,8 +114,147 @@ def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break
             'curr':str(line[65:68])
             })
         
-    print ("PAU")
-    ### 2.2.2. add extra details in price_dict from price_param_dict
+        # list of intermonth spreads[commodity, tier a, tier b, spread] 
+        # eg ['WMP',1,2,130]
+        elif line.startswith("C"):
+            intermonth_list.append({
+            'comm':str(line[2:8]).strip(),
+            'tiera':int(line[23:25].strip() or 0),
+            'tierb':int(line[30:32].strip() or 0),
+            'spread':int(line[14:21].strip() or 0)
+            })
+        
+        # list of intermonth details[commodity, tier number 1, start month, end month...tiers 2,...,3,...,4,...]
+        # eg ['WMP',1,201805,201807,2,201808,201905,3,201906,202006,0,0,0]
+        elif line.startswith("3"):      
+            intermonth_param_list.append({
+            'comm':str(line[2:8]).strip(),
+            'tier1':int(line[10:12].strip() or 0),
+            'tier1start':int(line[12:18].strip() or 0),
+            'tier1end':int(line[18:24].strip() or 0),
+            'tier2':int(line[24:26].strip() or 0),
+            'tier2start':int(line[26:32].strip() or 0),
+            'tier2end':int(line[32:38].strip() or 0),
+            'tier3':int(line[38:40].strip() or 0),
+            'tier3start':int(line[40:46].strip() or 0),
+            'tier3end':int(line[46:52].strip() or 0),
+            'tier4':int(line[52:54].strip() or 0),
+            'tier4start':int(line[54:60].strip() or 0),
+            'tier4end':int(line[60:66].strip() or 0)
+            })
+
+        # list of intercomm spreads[commodity a, delta a, commodity b, delta b, spread]
+        # eg ['WMP',20,'SMP',29,30]
+        elif line.startswith("6"):
+            intercomm_list.append({
+            'comma':str(line[20:26]).strip(),
+            'deltaa':int(line[26:29].strip() or 0),
+            'commb':str(line[38:44]).strip(),
+            'deltab':int(line[44:47].strip() or 0),
+            'spread':int(line[9:12].strip() or 0)
+            })
+            
+        # list of intercomm groups and up to ten constituent commodities
+        # eg ['CDA', 'WMP','MKP']
+        elif line.startswith("5"):
+            intercomm_param_list.append({
+            'commgroup':str(line[2:5]).strip(),
+            'comm1':str(line[12:18]).strip(),
+            'comm2':str(line[18:24]).strip(),
+            'comm3':str(line[24:30]).strip(),
+            'comm4':str(line[30:36]).strip(),
+            'comm5':str(line[36:42]).strip(),
+            'comm6':str(line[42:48]).strip(),
+            'comm7':str(line[48:54]).strip(),
+            'comm8':str(line[54:60]).strip(),
+            'comm9':str(line[60:66]).strip(),
+            'comm10':str(line[66:72]).strip()
+            })
+            
+        # list of instruments by type and maturity, one option record per maturity no individual records for call/put or diff strikes [commodity, type, maturity] 
+        # eg ['WMP','OOF',201801]
+        elif line.startswith("B") and line[15:18] != "PHY":            
+            instrument_list.append({
+            'comm':str(line[5:15]).strip(),
+            'instype':str(line[15:18]),
+            'maturity':int(line[18:24].strip() or 0)
+            })
+        
+        # same as above, incl delta scaling factor
+            deltascale_list.append({
+            'comm':str(line[5:15]).strip(),
+            'instype':str(line[15:18]),
+            'maturity':int(line[18:24].strip() or 0),
+            'deltasf':int(line[85:91].strip() or 0)
+            })
+
+        # list of options prices and deltas [commodity,option on physical or future,call or put, maturity,strike,composite delta,dsp]
+        elif line.startswith("82") and (str(line[25:28]) == "OOF" or str(line[25:28]) == "OOP"):
+            option_list.append({
+            'comm':str(line[5:15]).strip(),
+            'instype':str(line[25:28]),
+            'callput':str(line[28:29]),
+            'maturity':int(line[38:44].strip() or 0),
+            'strike':int(line[47:54].strip() or 0),
+            'delta':int(line[96:101].strip() or 0) * (-1 if str(line[101:102]) == "-" else 1),    # multiply with -1 in case delta is negative
+            'dsp':int(line[110:117].strip() or 0) * (-1 if str(line[117:118]) == "-" else 1),
+            })
+        
+        # list of currency exchange rates [currency converted from, currency converted to, rate]
+        # eg ['USD','NZD',1.450537]
+        elif line.startswith("T"):            
+            currency_list.append({
+            'curra':str(line[2:5]),
+            'currb':str(line[6:9]),
+            'rate':float(line[10:20])/1000000
+            })
+
+    ### 2.2.2. add extra details in price_list[] from price_param_list[]
+    # new price_list[] = [commodity, type, maturity, price, settlement price decimal locator, contract value factor] 
+    # eg ['MKP','FUT',201809,655,2,6000] 
+    for price in price_list:
+        appended = False    # define appended boolean, default = false
+        for price_param in price_param_list:
+            if price['comm'] == price_param['comm'] and price['instype'] == price_param['instype']: # condition match comm and instype
+                price.update({
+                'dspdl':price_param['dspdl'],
+                'cvf':price_param['cvf']
+                })      # add value from price_param_list[] to price_list[]
+                appended = True # change appended boolean to true
+                break       # break because there are multiple row matching the if condition
+        if not appended:    # case appended boolean = false
+            logging.error("Error with original SPAN parameters: this instrument type from record 8 does not"
+                " have an equivalent record P: " + str(price['comm']) + str(price['instype']))
+            price.update({
+            'dspdl':"NA",
+            'cvf':"NA"
+            })
+
+    # add extra details in instrument_list[] from price_param_list[]
+    # now instrument_list is [commodity, type, maturity, settlement price decimal locator, contract value factor]
+    # eg ['FBU','OOP',201809,2,100]
+    for instrument in instrument_list:
+        appended = False
+        for price_param in price_param_list:
+            if instrument['comm'] == price_param['comm'] and instrument['instype'] == price_param['instype']:
+                instrument.update({
+                    'dspdl':price_param['dspdl'],
+                    'cvf':price_param['cvf']
+                    })
+                appended = True
+                break
+        if not appended:
+            logging.error("Error with original SPAN parameters: this instrument type from record B does not"
+                " have an equivalent record P: " + str(instrument['comm']) + str(instrument['instype']))
+            instrument.update({
+            'dspdl':"NA",
+            'cvf':"NA"
+            })
+
+    return (price_list, intermonth_list, intermonth_param_list, intercomm_list,
+        intercomm_param_list, instrument_list, option_list, deltascale_list,
+        price_param_list, currency_list)
+    
     
 
 ############################### MAIN ###############################
@@ -128,7 +270,12 @@ for date in dates:  # loop for all date in dates list
     
     #2. read pa2 file & store data into various lists
     pa2_list = read_pa2(pa2File)
-    parse_pa2(pa2_list)
+    (price_list, intermonth_list, intermonth_param_list, intercomm_list,
+            intercomm_param_list, instrument_list, option_list, deltascale_list,
+            price_param_list, currency_list) = parse_pa2(pa2_list)
+    print (price_list, intermonth_list, intermonth_param_list, intercomm_list,
+            intercomm_param_list, instrument_list, option_list, deltascale_list,
+            price_param_list, currency_list)
     
     #3. read 3 constant files
 
