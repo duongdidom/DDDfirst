@@ -8,14 +8,15 @@ import shutil   # import shutil module to copy file
 import csv      # import csv to read csv file
 
 # define start date and end date
-startD = "09/11/2018" 
-endD = "10/11/2018"
+# convert start date and end date to date format. strptime = string parse time = retrieve time string
+startD = datetime.strptime("09/11/2018", "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
+endD = datetime.strptime("10/11/2018", "%d/%m/%Y")      # output would be in date format, not string format
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
 parent_dir = r"C:\Users\douglas.cao\Documents\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
 
 # create a log file
-LOGFILE = r"C:\Users\douglas.cao\Documents\Python\RiskCapital\out\log.log"
+LOGFILE = parent_dir + r"\out\log.log"
 logging.basicConfig(filename=LOGFILE.format(datetime.now()), level=logging.INFO)    # tell python to start logging
 
 #1. Collect source and new files:
@@ -278,9 +279,9 @@ def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break
             })
 
     # # check new list
-    # print("new price list")
+    # print("revised price list")
     # for l in price_list: print (l) 
-    # print ("new instrument list")
+    # print ("revised instrument list")
     # for l in instrument_list: print (l) 
 
     return (price_list, intermonth_list, intermonth_param_list, intercomm_list,
@@ -368,34 +369,93 @@ def read_rcparams (rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv):
 
     return rc_scan_list, rc_intermonth_list, rc_intercomm_list
     
+#4. calculate new scan range, new intermonth, new intercomm, based on 3 rc cons files. Then re write intermonth list and intercomm list 
+"""
+anything misspecified or missing is ignored, default for scan stretch is 
+0.25, intermonth and intercomm default to what is in original margin pa2
+"""
+### 4.1. calcuate new scan range
+def calc_newscan(price_list, instrument_list,rc_scan_list):
+    ###4.1.1. add new column to price list: rc scan rate
+    for price in price_list:
+        appended = False
+        for rc_scan in rc_scan_list:
+            if price['comm'] == rc_scan['comm'] and price['maturity'] == rc_scan['maturity']:
+                price['rc_scan_rate'] = rc_scan['rate']
+                appended = True
+                logging.info("Stress scan rate of " + str(price['rc_scan_rate']) + " specified for "
+                    + str(price['comm']) + str(price['maturity']))
+                break
+        if not appended:
+            price['rc_scan_rate'] = 0.25 # if instrument is not specified in rc params, given stretch of 25%
+    
+    # print("new price list")
+    # for l in price_list: print (l) 
+
+    # 4.1.2. add new column to instrument list: price, rc scan range 
+    # instrument_list is now [commodity,type,maturity,settlement price decimal locator, contract value factor, price, rc scan range]
+    for instrument in instrument_list:
+        for price in price_list:
+            # for futures: append condition on commodity, type, maturity
+            if instrument['instype'] == "FUT":
+                if instrument['comm'] == price['comm'] and instrument['instype'] == price['instype'] and instrument['maturity'] == price['maturity']:
+                    try:
+                        instrument['dspconv'] = (price['dsp']/10**price['dspdl'])*instrument['cvf'] # dsp converted = dsp /(10^decimal locator) * contract size
+                        instrument['rc_scan_range'] = (price['dsp']/10**price['dspdl'])*instrument['cvf']*price['rc_scan_rate'] # rc scan range = dsp /(10^decimal locator) * contract size * rc scan rate
+                        break
+                    except (ValueError,KeyError,TypeError):
+                        pass
+            # for options on futures: append condition on commodity, maturity, type = future instead of matching with price list, no maturity
+            elif instrument['instype'] == "OOF":
+                if instrument['comm'] == price['comm'] and price['instype'] == "FUT" and instrument['maturity'] == price['maturity']:
+                    try:
+                        instrument['dspconv'] = (price['dsp']/10**price['dspdl'])*instrument['cvf']
+                        instrument['rc_scan_range'] = (price['dsp']/10**price['dspdl'])*instrument['cvf']*price['rc_scan_rate']
+                        break
+                    except (ValueError,KeyError,TypeError):
+                        pass
+            # for options on physical: append condition on commodity, type = physical instead of matching with price list, no maturity
+            elif instrument['instype'] == "OOP":
+                if instrument['comm'] == price['comm'] and price['instype'] == "PHY":
+                    try:
+                        instrument['dspconv'] = (price['dsp']/10**price['dspdl'])*instrument['cvf']
+                        instrument['rc_scan_range'] = (price['dsp']/10**price['dspdl'])*instrument['cvf']*price['rc_scan_rate']
+                        break
+                    except (ValueError,KeyError,TypeError):
+                        pass
+            else:
+                logging.error("Error with original SPAN parameters: this instrument type from record B does not have an underlying price in record 8"
+                    " in record 82: "+str(instrument['comm'])+str(instrument['instype'])+str(instrument['maturity']))
+    
+    # print("new instrument list")
+    # for l in instrument_list: print (l) 
+
+    return price_list, instrument_list
+
 
 
 ############################### MAIN ###############################
-# convert start date and end date to date format. strptime = string parse time = retrieve time string
-startD = datetime.strptime(startD, "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
-endD = datetime.strptime(endD, "%d/%m/%Y")  # output would be in date format, not string format
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
 
 hhmmss = datetime.now().strftime("%H%M%S")  # define execution time to create time stamp in output files. strftime = string format time = format time string
 
 for date in dates:  # loop for all date in dates list
     #1. Collect input files (cons, input). Define newly created file and path. 
-    (pa2_pa2, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) 
-        = find_current_files(date.strftime("%Y%m%d"), hhmmss)
+    (pa2_pa2, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
     
     #2. read pa2 file & store data into various lists
     pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
     
     (price_list, intermonth_list, intermonth_param_list, intercomm_list,
             intercomm_param_list, instrument_list, option_list, deltascale_list,
-            price_param_list, currency_list)
-             = parse_pa2(pa2_list)  # break down from pa2 big list to several smaller list
+            price_param_list, currency_list) = parse_pa2(pa2_list)  # break down from pa2 big list to several smaller list
     
     #3. read 3 constant files. Read from file to list
-    (rc_scan_list, rc_intermonth_list, rc_intercomm_list) 
-        = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
+    (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
 
-    #4. calculate new stretched scan range, intermonth, intercomm
+    #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
+    calc_newscan(price_list, instrument_list,rc_scan_list)
+
 
     #5. write risk capital pa2 file
     # new pa2 file wouldn't have new risk array calculated, has to be recalculated using whatif file
