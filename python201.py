@@ -1,10 +1,11 @@
 # # Breakdown and recreate Risk Capital calculation script
 
+import logging  # import logging to log any error
 import os   # import os module to change working directory
 import glob     # import glob module to file list of filename that match certain criteria
 from datetime import datetime, date, timedelta   # import datetime module to convert string to date format
 import shutil   # import shutil module to copy file
-import sys
+import csv      # import csv to read csv file
 
 # define start date and end date
 startD = "09/11/2018" 
@@ -12,6 +13,10 @@ endD = "10/11/2018"
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
 parent_dir = r"C:\Users\douglas.cao\Documents\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
+
+# create a log file
+LOGFILE = r"C:\Users\douglas.cao\Documents\Python\RiskCapital\out\log.log"
+logging.basicConfig(filename=LOGFILE.format(datetime.now()), level=logging.INFO)    # tell python to start logging
 
 #1. Collect source and new files:
 def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execution time
@@ -72,9 +77,9 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
 
 #2. read pa2 & store data into various lists
 ### 2.1. read 
-def read_pa2(pa2File):
-    with open(pa2File,"r") as f: # open pa2 file in read mode and name this file as f
-        pa2_list = f.readlines() # read all lines in pa2File and store each line into list
+def read_pa2(pa2_pa2):
+    with open(pa2_pa2,"r") as f: # open pa2 file in read mode and name this file as f
+        pa2_list = f.readlines() # read all lines in pa2 file and store each line into list
     return (pa2_list)
 
 ### 2.2. retrieve and store
@@ -209,6 +214,27 @@ def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break
             'rate':float(line[10:20])/1000000
             })
 
+    # # checking
+    # print ("price list")
+    # for l in price_list: print (l) 
+    # print ("price param")
+    # for l in price_param_list: print (l)
+    # print ("intermonth list")
+    # for l in intermonth_list: print (l)
+    # print ("intermonth param")
+    # for l in intermonth_param_list: print (l)
+    # print ("intercomm list")
+    # for l in intercomm_list: print (l)
+    # print ("intercom param")
+    # for l in intercomm_param_list: print (l)
+    # print ("instrument")
+    # for l in instrument_list: print (l)
+    # print ("delta scal")
+    # for l in deltascale_list: print (l)
+    # print ("option")
+    # for l in option_list: print (l)
+    # for l in currency_list : print (l)
+    
     ### 2.2.2. add extra details in price_list[] from price_param_list[]
     # new price_list[] = [commodity, type, maturity, price, settlement price decimal locator, contract value factor] 
     # eg ['MKP','FUT',201809,655,2,6000] 
@@ -251,11 +277,98 @@ def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break
             'cvf':"NA"
             })
 
+    # # check new list
+    # print("new price list")
+    # for l in price_list: print (l) 
+    # print ("new instrument list")
+    # for l in instrument_list: print (l) 
+
     return (price_list, intermonth_list, intermonth_param_list, intercomm_list,
         intercomm_param_list, instrument_list, option_list, deltascale_list,
         price_param_list, currency_list)
+
+#3. read 3 constant files: transfer data from file to list
+def read_rcparams (rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv):
+    ### 3.1. create bunch of lists to store data
+    rc_scan_list = []
+    rc_intermonth_list = []
+    rc_intercomm_list = []
+
+    ### 3.2. read rc scan. Parse data to rc scan list
+    # commodity, maturity, stretch percentage 
+    # eg ['MKP',201809,0.02]
+    with open (rc_scan_csv, "r") as f:
+        rc_scan_reader = csv.reader(f)  # open csv file, read, then store data of each row in a list and each cell as value in that list. If using readlines, whole row data will be one value in a list
+        for line in rc_scan_reader:    # append data to rc scan list from rc scan reader
+            try:
+                rc_scan_list.append({
+                    'comm':str(line[0]).strip(),
+                    'maturity':(int(line[1]) or 0),
+                    'rate':(float(line[2]) or 0)
+                    })
+            except ValueError:
+                logging.error("Format of row = (" 
+                    + str('%-2s ' * len(line))[:-1] % tuple(line) 
+                    + ") in cons_rc_scan.csv is not as expected and has been ignored. "
+                    "It should be commodity, yyyymm, stretch % as decimal, e.g. WMP 201812 0.24")
     
+    ### 3.3. read rc intermonth. Parse data to rc intermonth list
+    # commodity, tier a, tier b, spread%
+    # eg ['WMP',1,2,0.3]
+    with open (rc_intermonth_csv,"r") as f:
+        rc_intermonth_reader = csv.reader(f)
+        for line in rc_intermonth_reader:
+            try:
+                rc_intermonth_list.append({
+                    'comm':str(line[0]).strip(),        
+                    'tiera':(int(line[1]) or 0),
+                    'tierb':(int(line[2]) or 0),
+                    'rate':(float(line[3]) or 0)
+                    })
+            except ValueError:
+                logging.error("Format of row = (" 
+                    + str('%-2s ' * len(line))[:-1] % tuple(line) 
+                    + ") in cons_rc_intermonth.csv is not as expected and has been ignored. "
+                    "It should be commodity, tier a number, tier b number, intermonth % as "
+                    "decimal e.g. WMP 1 2 0.02")
+
+    ### 3.4. read rc intercomm. Parse data to rc intercomm list
+    # commodity a, delta a, commodity b, delta b, spread% 
+    # eg ['WMP',20,'SMP',29,0.4]
+    with open (rc_intercomm_csv, "r") as f:
+        rc_intercomm_reader = csv.reader(f)
+        for line in rc_intercomm_reader:
+            try:
+                rc_intercomm_list.append({
+                    'comma':str(line[0]).strip(),
+                    'deltaa':(int(line[1]) or 0),
+                    'commb':str(line[2]).strip(),
+                    'deltab':(int(line[3]) or 0),
+                    'rate':(float(line[4]) or 0)
+                    })
+            except ValueError:
+                logging.error("Format of row = (" 
+                    + str('%-2s ' * len(line))[:-1] % tuple(line) 
+                    + ") in cons_rc_intercomm is not as expected and has been ignored. "
+                    "It should be commodity A, delta A as an integer, commodity B, delta B as "
+                    "an integer, intercomm % as decimal e.g. WMP 20 SMP 29 0.3")
     
+    ### 3.5. Add blank entries into three rc lists above so no KeyError later (DOUBLE CHECK THIS)
+    rc_scan_list.append({'comm':"",'maturity':"",'rate':""})
+    rc_intermonth_list.append({'comm':"",'tiera':"",'tierb':"",'rate':""})
+    rc_intercomm_list.append({'comma':"",'deltaa':"",'commb':"",'deltab':"",'rate':""})
+    
+    ### check new list
+    # print ("rc scan")
+    # for l in rc_scan_list: print (l)
+    # print ("rc intermonth")
+    # for l in rc_intermonth_list: print (l)
+    # print ("rc intercomm")
+    # for l in rc_intercomm_list: print (l)
+
+    return rc_scan_list, rc_intermonth_list, rc_intercomm_list
+    
+
 
 ############################### MAIN ###############################
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
@@ -264,20 +377,23 @@ endD = datetime.strptime(endD, "%d/%m/%Y")  # output would be in date format, no
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
 
 hhmmss = datetime.now().strftime("%H%M%S")  # define execution time to create time stamp in output files. strftime = string format time = format time string
+
 for date in dates:  # loop for all date in dates list
     #1. Collect input files (cons, input). Define newly created file and path. 
-    (pa2File, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
+    (pa2_pa2, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) 
+        = find_current_files(date.strftime("%Y%m%d"), hhmmss)
     
     #2. read pa2 file & store data into various lists
-    pa2_list = read_pa2(pa2File)
+    pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
+    
     (price_list, intermonth_list, intermonth_param_list, intercomm_list,
             intercomm_param_list, instrument_list, option_list, deltascale_list,
-            price_param_list, currency_list) = parse_pa2(pa2_list)
-    print (price_list, intermonth_list, intermonth_param_list, intercomm_list,
-            intercomm_param_list, instrument_list, option_list, deltascale_list,
             price_param_list, currency_list)
+             = parse_pa2(pa2_list)  # break down from pa2 big list to several smaller list
     
-    #3. read 3 constant files
+    #3. read 3 constant files. Read from file to list
+    (rc_scan_list, rc_intermonth_list, rc_intercomm_list) 
+        = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
 
     #4. calculate new stretched scan range, intermonth, intercomm
 
