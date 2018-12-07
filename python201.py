@@ -1,4 +1,5 @@
 # # Breakdown and recreate Risk Capital calculation script
+# up to line 558 original 
 
 import logging  # import logging to log any error
 import os   # import os module to change working directory
@@ -487,12 +488,14 @@ def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_
                         " was not considered in creating or applying intermonth spreads. This is expected on expiry day.")
                     instrument['tier'] = "NA"
     
+    # calculate average dsp and average price scan range per tier. Append it to tier list
+    # tier_list is now [commodity, month tier, DSP sum, scan range sum, number of instruments per tier]
     for tier in tier_list:
         pricesum = 0
         scansum = 0
         denominator = 0
         for instrument in instrument_list:           
-            if tier['comm'] == instrument['comm'] and tier['tier'] == instrument['tier'] and instrument['instype'] != "OOF":
+            if tier['comm'] == instrument['comm'] and tier['tier'] == instrument['tier'] and instrument['instype'] != "OOF":    # excluding option instrument type
                 try:
                     pricesum = pricesum + instrument['dspconv']
                     scansum = scansum + instrument['rc_scan_range']
