@@ -432,7 +432,79 @@ def calc_newscan(price_list, instrument_list,rc_scan_list):
 
     return price_list, instrument_list
 
-
+### 4.2. calculate new intermonth
+def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_intermonth_list):
+    tier_list = []  # create empty tier list
+    # tier list now become [commodity, month tier]
+    # e.g ['WMP', 1]
+    for intermonth_param in intermonth_param_list:
+        if intermonth_param['tier1'] != 0: 
+            tier_list.append({
+            'comm':intermonth_param['comm'],
+            'tier':intermonth_param['tier1']
+            })
+        if intermonth_param['tier2'] != 0: 
+            tier_list.append({
+            'comm':intermonth_param['comm'],
+            'tier':intermonth_param['tier2']
+            })
+        if intermonth_param['tier3'] != 0: 
+            tier_list.append({
+            'comm':intermonth_param['comm'],
+            'tier':intermonth_param['tier3']
+            })
+        if intermonth_param['tier4'] != 0: 
+            tier_list.append({
+            'comm':intermonth_param['comm'],
+            'tier':intermonth_param['tier4']
+            })
+    
+    # loop through instrument list, intermonth para; add new column to instrument list: tier = find which tier the instrument belongs to
+    # instrument_list is now [commodity,type,maturity,settlement price decimal locator, contract value factor, price, rc scan range, month tier] 
+    # eg ['SMP','OOF','201805', 2, 1, price, 465.59999, 1]
+    for instrument in instrument_list:
+        for intermonth_param in intermonth_param_list:
+            if instrument['comm'] == intermonth_param['comm']:
+                if intermonth_param['tier1start'] <= instrument['maturity'] <= intermonth_param['tier1end']:
+                    # if the instrument's maturity is within tier 1 start date & end date then its in tier 1
+                    instrument['tier'] = intermonth_param['tier1']
+                    break
+                elif intermonth_param['tier2start'] <= instrument['maturity'] <= intermonth_param['tier2end']:
+                    # if the instrument's maturity is within tier 2 start date & end date then its in tier 2
+                    instrument['tier'] = intermonth_param['tier2']
+                    break
+                elif intermonth_param['tier3start'] <= instrument['maturity'] <= intermonth_param['tier3end']:
+                    # if the instrument's maturity is within tier 3 start date & end date then its in tier 3
+                    instrument['tier'] = intermonth_param['tier3']
+                    break
+                elif intermonth_param['tier4start'] <= instrument['maturity'] <= intermonth_param['tier4end']:
+                    # if the instrument's maturity is within tier 4 start date & end date then its in tier 4
+                    instrument['tier'] = intermonth_param['tier4']
+                    break   
+                # on expiry day, expiring contracts will not be included in intermonth DOUBLE CHECK SCRIPT ON EXPIRATION DAY
+                else:
+                    logging.info(str(instrument['comm']) + str(instrument['maturity']) + 
+                        " was not considered in creating or applying intermonth spreads. This is expected on expiry day.")
+                    instrument['tier'] = "NA"
+    
+    for tier in tier_list:
+        pricesum = 0
+        scansum = 0
+        denominator = 0
+        for instrument in instrument_list:           
+            if tier['comm'] == instrument['comm'] and tier['tier'] == instrument['tier'] and instrument['instype'] != "OOF":
+                try:
+                    pricesum = pricesum + instrument['dspconv']
+                    scansum = scansum + instrument['rc_scan_range']
+                    denominator = denominator + 1
+                except KeyError:
+                    pass
+        tier.update({
+        'pricesum':pricesum,
+        'scansum':scansum,
+        'denominator':denominator
+        })
+    for l in tier_list: print (l) 
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -454,7 +526,9 @@ for date in dates:  # loop for all date in dates list
     (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
 
     #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
-    calc_newscan(price_list, instrument_list,rc_scan_list)
+    price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
+
+    calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   
 
 
     #5. write risk capital pa2 file
