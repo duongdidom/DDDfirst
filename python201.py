@@ -7,6 +7,7 @@ import glob     # import glob module to file list of filename that match certain
 from datetime import datetime, date, timedelta   # import datetime module to convert string to date format
 import shutil   # import shutil module to copy file
 import csv      # import csv to read csv file
+import copy     # import copy to copy from (sum bp account w/o currency) to (sum bp account with currency)
 
 # define start date and end date
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
@@ -697,7 +698,124 @@ def write_whatif(instrument_list,whatif_xml):
         for line in xml_list:
             f.write(line)
             f.write("\n")
-        f.write("\n</scenarioFile>")  # last add new line + scenarioFile 
+        f.write("\n</scenarioFile>")  # last add new line + scenarioFile
+
+#7. Read position and break it down into other lists:
+### 7.1. read position and store it into a list
+def read_position(position_txt):
+    position_list = []
+    with open(position_txt, "r") as f:  # open as read mode
+        position_list = f.readlines()   # readlines and store them in position list
+    return position_list  
+
+### 7.2. break down position list to several other lists
+def parse_position(position_list):
+    # 7.2.1. create new empty lists    
+    record5_list = []   # everything in record 5, including position
+    bpins_list = []     # every intruments per bp, excluding position
+    option_position_list = []   # every option position per bp per ac. This is usefule for delta adjustment net exposure later on
+    bpacc_list = []     # every account name per bp, add sum account for each bp
+    sum_bpacc_list = []
+
+    # 7.2.2. loop through position list and fill in data for those lists above
+    for position in position_list:
+        if position.startswith("5"):
+            # list of BP+instr,net position [BP+instr chunk,net position]
+            record5_list.append({
+            'bpins':str(position[1:4])+str(position[24:92]),
+            'position':int(position[92:100].strip() or 0)
+            })  # record 5 break down to instrument and position per instrument
+
+            # list of BP+instr [BP+instr chunk]
+            bpins_list.append({'bpins':str(position[1:4])+str(position[24:92])})
+
+            # list of BP+acc [BP+acc chunk]
+            bpacc_list.append({'bpacc':str(position[1:4])+str(position[4:24]).strip()}) # bp+account name
+            bpacc_list.append({'bpacc':str(position[1:4])+"Sum"})   # sum account name to bp
+
+            # list of BP,account,commodity,option on future/physical,call/put,maturity,strike,net position
+            if str(position[45:48]) == "OOF" or str(position[45:48]) == "OOP":      # case position is option on future/option on physical
+                option_position_list.append({
+                'bp':str(position[1:4]),
+                'acc':str(position[4:24]).strip(),
+                'comm':str(position[35:45]).strip(),
+                'instype':str(position[45:48]),
+                'callput':str(position[48:49]),
+                'maturity':int(position[49:57].strip() or 0),
+                'strikeconv':float(position[78:92].strip() or 0)/10000000,  # strike price converted
+                'position':int(position[92:100].strip() or 0)   # +/- position
+                })
+    
+    # # check each list
+    # print ("record 5")
+    # for l in record5_list: print (l)
+    # print ("bp instrument list")
+    # for l in bpins_list: print (l)
+    # print ("bp account list")
+    # for l in bpacc_list: print (l)
+    # print ("option position list")
+    # for l in option_position_list: print (l)
+    
+    # 7.2.3. remove duplicates in bp instrument list & bp account list and insert to sum bp instrument and sum bp account lists. DOUBLE CHECK HOW THIS WORKS
+    # this is preparation step for creating sum accounts
+    sum_bpins_list = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bpins_list)]
+    sum_bpacc_list_nocurr = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bpacc_list)]  # sum bp account, no currency
+
+    # print ("sum bp instrument list")
+    # for l in sum_bpins_list: print (l)
+    # print ("sum bp account list without currency")
+    # for l in sum_bpacc_list_nocurr: print (l)
+
+    # 7.2.4. for each account in summ account list, add currency NZD & USD. I.e. duplicate numbers of rows in the list. 
+    for bpacc in sum_bpacc_list_nocurr:
+        bpacc['curr'] = "USD"
+        sum_bpacc_list.append(copy.deepcopy(bpacc))
+        bpacc['curr'] = "NZD"
+        sum_bpacc_list.append(copy.deepcopy(bpacc))    
+
+    # print ("sum bp account list with currency")
+    # for l in sum_bpacc_list: print (l) 
+
+    # 7.2.5. create sum position per bp
+    for bpins in sum_bpins_list:
+        # first, add column position in sum position list, & set to 0
+        bpins['position'] = 0 
+
+        # loop through record 5
+        for record5 in record5_list:            
+            if bpins['bpins'] == record5['bpins']:  # if match bp and instrument
+                bpins['position'] = bpins['position'] + record5['position'] # add record 5 position to sum pb position
+
+        # add the whole summed record into the options list too
+        if str(bpins['bpins'][24:27]) == "OOF" or str(bpins['bpins'][24:27]) == "OOP":      # if instrument is option
+            option_position_list.append({
+            'bp':str(bpins['bpins'][0:3]),  # bp name
+            'acc':"Sum",                    # account name = Sum
+            'comm':str(bpins['bpins'][14:24]).strip(),  # commodity
+            'instype':str(bpins['bpins'][24:27]),       # instrument type OOF or OOP
+            'callput':str(bpins['bpins'][27:28]),       # call / put
+            'maturity':int(bpins['bpins'][48:56].strip() or 0), # maturity
+            'strikeconv':float(bpins['bpins'][57:71].strip() or 0)/10000000,    # strike price converted
+            'position':bpins['position']    # position per instrument
+            })
+
+    print ("sum bp instrument with position")
+    for l in sum_bpins_list: print (l)
+    print ("option position list, sum account")
+    for l in option_position_list: print (l)
+
+    return sum_bpins_list, option_position_list, sum_bpacc_list
+
+#8. write new position file with additional information for sum account
+def write_newposition(position_list,sum_bpins_list,sum_position_txt):
+    with open(sum_position_txt, "w") as f:  # open sum position file as f in write mode
+        for position in position_list:  # loop through position list, (from original position file)
+            f.write(position)   # write every row in position list to sum position file
+            if position.startswith("2"):    # for record type 2 = list of accounts
+                f.write(position.strip()[:4]+"Sum".ljust(20," ")+position.strip()[24:]+"\n")     # add account named "Sum"
+                
+        for bpins in sum_bpins_list:
+            f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")    # add position for sum account
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -706,7 +824,7 @@ hhmmss = datetime.now().strftime("%H%M%S")  # define execution time to create ti
 
 for date in dates:  # loop for all date in dates list
     #1. Collect input files (cons, input). Define newly created file and path. 
-    (pa2_pa2, posistionFile, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
+    (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
     
     #2. read pa2 file & store data into various lists
     pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
@@ -734,9 +852,13 @@ for date in dates:  # loop for all date in dates list
     #6. write whatif file which has scans adjusted
     write_whatif(instrument_list,whatif_xml)
 
-    #7. read position file
+    #7. read position file & break it down into smaller pieces
+    position_list = read_position(position_txt)    # read and store it into list
+    
+    sum_bpins_list, option_position_list, sum_bpacc_list = parse_position(position_list)    # break down into several other lists
 
-    #8. calculate and write position file with sum positions
+    #8. write position file with sum positions
+    write_newposition(position_list,sum_bpins_list,sum_position_txt)
 
     #9. calculate and get report for:
     #9.1. margin
