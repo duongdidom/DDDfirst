@@ -62,18 +62,18 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
 
     ### 1.3. define a bunch of newly created files
     # Modified files
-    new_pa2 = out_timestamp + r"new.pa2"
-    sum_position_txt =  out_timestamp + r"sum.txt"
+    new_pa2 = parent_dir + r"\\out\\" + out_timestamp + r"new.pa2"
+    sum_position_txt =  parent_dir + r"\\out\\" + out_timestamp + r"sum.txt"
     
     # Newly created files
-    whatif_xml =  out_timestamp + r"whatif.xml"
+    whatif_xml =  parent_dir + r"\\out\\" + out_timestamp + r"whatif.xml"
     # Leave out file extension to add identifier in write_margin/rc_spanit function
-    spanit_txt = out_timestamp + r"spanit_" 
+    spanit_txt = parent_dir + r"\\out\\" + out_timestamp + r"spanit_" 
     # Leave out file extension to add identifier in write_margin/rc_spanit function
-    span_spn = out_timestamp + r"span_" 
+    span_spn = parent_dir + r"\\out\\" + out_timestamp + r"span_" 
     # Leave out file extension to add identifier in call_span_report function
-    pbreq_csv =  out_timestamp + r"pbreq_" 
-    final_csv = out_timestamp + r"final.csv"
+    pbreq_csv =  parent_dir + r"\\out\\" + out_timestamp + r"pbreq_" 
+    final_csv = parent_dir + r"\\out\\" + out_timestamp + r"final.csv"
 
     return (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv)
 
@@ -576,6 +576,128 @@ def write_newinters(intermonth_list,intercomm_list,pa2_list):
     new_intermonth_list = []
     new_intercomm_list = []
 
+    ### 4.4.1. update new intermonth list
+    for pa2 in pa2_list:        # loop through pa2 list
+        if pa2.startswith("C"):     # record type C
+            appendedmonth = False
+            for intermonth in intermonth_list:  # loop through intermonth list
+                if str(pa2[2:8]).strip() == intermonth['comm'] and int(pa2[23:25].strip() or 0) == intermonth['tiera'] and int(pa2[30:32].strip() or 0) == intermonth['tierb']:     # if matches commodity, tier A & tier B
+                    monthstring1 = "Intermonth " + str(intermonth['comm']) + " " + str(intermonth['tiera']) + "v" + str(intermonth['tierb']) + " was " + str(int(pa2[14:21]))       # update value for monthstring1
+                    monthstring2 = ""   # empty string for monthstring2
+                    if intermonth['rc_intermonth_spread'] == "NA":      # case new rc intermonth spread is N/A
+                        new_intermonth_list.append(pa2) # add current pa2 row to new intermonth list
+                        appendedmonth = True        # not sure what this boolean is for
+                        monthstring2 = ", no change"    # update monthstring2
+                        logging.info(monthstring1+monthstring2)
+                        break
+                    elif intermonth['rc_intermonth_spread'] != "NA":    # case new rc intermonth spread is NOT N/A
+                        new_intermonth_list.append(pa2[:14] + str(int(intermonth['rc_intermonth_spread'])).rjust(7,'0') + pa2[21:])     # add current pa2 row to new intermonth list up to character 15th + column rc intermonth spread, add current pa2 row from character 21st
+                        # fill with 0 until string has 7 characters
+                        appendedmonth = True
+                        monthstring2 = ", now " + str(int(intermonth['rc_intermonth_spread']))  # update value for monthstring2
+                        logging.info(monthstring1+monthstring2)
+                        break
+            if not appendedmonth:
+            # should have already been taken out by NA condition above, but left here anyway
+                new_intermonth_list.append(pa2)   
+        
+        ### 4.4.2 update new intercomm list. Same methodology as new intermonth
+        if pa2.startswith("6"):     # record type 6
+            appendedcomm = False
+            for intercomm in intercomm_list:
+                if str(pa2[20:26]).strip() == intercomm['comma'] and str(pa2[38:44]).strip() == intercomm['commb']:
+                    commstring1 = ("Intercomm (" 
+                        + str(int(float(pa2[26:33])/10000)) + " " 
+                        + str(intercomm['comma']) + " v " 
+                        + str(int(float(pa2[44:51])/10000)) + " " 
+                        + str(intercomm['commb']) + " = " 
+                        + str(int(pa2[9:16])/10000) + ")")
+                    commstring2 = ""
+                    if intercomm['rc_intercomm_rate'] == "NA":
+                        new_intercomm_list.append(pa2)
+                        appendedcomm = True
+                        commstring2 = ", no change"
+                        logging.info(commstring1+commstring2)
+                        break
+                    elif intercomm['rc_intercomm_rate'] != "NA":
+                        new_intercomm_list.append(
+                            pa2[:9] 
+                            + str(intercomm['rc_intercomm_rate']).rjust(3,'0') 
+                            + "0000" 
+                            + pa2[16:26] 
+                            + str(int(intercomm['rc_intercomm_deltaa'])).rjust(3,'0') 
+                            + "0000" 
+                            + pa2[33:44] 
+                            + str(int(intercomm['rc_intercomm_deltab'])).rjust(3,'0')
+                            + "0000" 
+                            + pa2[51:])
+                        appendedcomm = True
+                        commstring2 = (", now (" 
+                            + str(int(intercomm['rc_intercomm_deltaa'])) + " " 
+                            + str(intercomm['comma']) + " v " 
+                            + str(int(intercomm['rc_intercomm_deltab'])) + " " 
+                            + str(intercomm['commb']) + " = " 
+                            + str(intercomm['rc_intercomm_rate']) + ")")
+                        logging.info(commstring1+commstring2)
+                        break
+            if not appendedcomm:
+                # should have already been taken out by NA condition above, but left here anyway
+                new_intercomm_list.append(pa2)
+
+    # print ("RC intermonth")
+    # for l in new_intermonth_list: print (l)
+    # print ("RC intercomm")
+    # for l in new_intercomm_list: print (l)
+
+    return new_intermonth_list, new_intercomm_list
+
+# 5. write new pa2 for RC calculation, using current pa2 list (from original pa2 file), new intermonth list + new intercomm list (above), new_pa2 (defined in find current files step)
+def write_new_pa2(pa2_list,new_intermonth_list,new_intercomm_list,new_pa2):
+    with open(new_pa2, "w") as f:  # open new pa2 file in write mode
+        for pa2 in pa2_list:    # for every row in pa2 list
+            if not pa2.startswith("C") and not pa2.startswith("6"): # if not record type C and 6
+                f.write(pa2)    # write pa2 row in new pa2 file
+        # then write new intermonth and new intercomm to the bottom of the file
+        f.writelines(new_intermonth_list)   
+        f.writelines(new_intercomm_list)
+
+#6. write what if xml file
+def write_whatif(instrument_list,whatif_xml):  
+    # 6.1. define function write update scan: join together commodity, instrument type, maturity, newscan
+    def write_updatescan(commodity,instype,maturity,newscan):
+        return ''.join(("<updateRec>\n<ec>NZX</ec>\n<cc>",
+            commodity,
+            "</cc>\n<exch>NZX</exch>\n<pfCode>",
+            commodity,
+            "</pfCode>\n<pfType>",
+            instype,
+            "</pfType>\n<sPe>",
+            str(maturity),
+            "</sPe>\n<ePe>",
+            str(maturity),
+            "</ePe>\n<updType>UPD_PRICE_RG</updType>\n<updMethod>UPD_SET</updMethod>\n<value>",
+            "{:.2f}".format(newscan),   # new scan range with convert to 2 decimal places
+            "</value>\n</updateRec>",
+            ))
+
+    # 6.2. append update scan to xml list
+    xml_list = []  # define new empty xml list
+
+    for instrument in instrument_list:  # loop through instrument list
+        try:    # append to xml list all string info, defined in the write update scan function above
+            xml_list.append(write_updatescan(instrument['comm'],instrument['instype'],instrument['maturity'],instrument['rc_scan_range']))
+        except KeyError:
+        # if there is no scan range available for whatever reason, leave out of whatif
+            logging.error("This instrument has not been assigned a new scan range: " 
+                + str(instrument['comm'])+str(instrument['instype'])+str(instrument['maturity']))
+    
+    # 6.3. write xml list to xml file
+    with open(whatif_xml, "w") as f:
+        f.write("<scenarioFile>\n")   # first add scenarioFile + new line
+        for line in xml_list:
+            f.write(line)
+            f.write("\n")
+        f.write("\n</scenarioFile>")  # last add new line + scenarioFile 
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -607,8 +729,10 @@ for date in dates:  # loop for all date in dates list
 
     #5. write risk capital pa2 file
     # new pa2 file wouldn't have new risk array calculated, has to be recalculated using whatif file
+    write_new_pa2(pa2_list,new_intermonth_list,new_intercomm_list,new_pa2)
 
-    #6. write whatif file 
+    #6. write whatif file which has scans adjusted
+    write_whatif(instrument_list,whatif_xml)
 
     #7. read position file
 
