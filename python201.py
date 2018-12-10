@@ -436,7 +436,8 @@ def calc_newscan(price_list, instrument_list,rc_scan_list):
 ### 4.2. calculate new intermonth
 def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_intermonth_list):
     tier_list = []  # create empty tier list
-    # tier list now become [commodity, month tier]
+    
+    # 4.2.1. tier list now become [commodity, month tier]
     # e.g ['WMP', 1]
     for intermonth_param in intermonth_param_list:
         if intermonth_param['tier1'] != 0: 
@@ -460,7 +461,7 @@ def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_
             'tier':intermonth_param['tier4']
             })
     
-    # loop through instrument list, intermonth para; add new column to instrument list: tier = find which tier the instrument belongs to
+    # 4.2.2. loop through instrument list, intermonth para; add new column to instrument list: tier = find which tier the instrument belongs to
     # instrument_list is now [commodity,type,maturity,settlement price decimal locator, contract value factor, price, rc scan range, month tier] 
     # eg ['SMP','OOF','201805', 2, 1, price, 465.59999, 1]
     for instrument in instrument_list:
@@ -488,7 +489,7 @@ def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_
                         " was not considered in creating or applying intermonth spreads. This is expected on expiry day.")
                     instrument['tier'] = "NA"
     
-    # calculate average dsp and average price scan range per tier. Append it to tier list
+    # 4.2.3. calculate average dsp and average price scan range per tier. Append it to tier list
     # tier_list is now [commodity, month tier, DSP sum, scan range sum, number of instruments per tier]
     for tier in tier_list:
         pricesum = 0
@@ -507,7 +508,74 @@ def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_
         'scansum':scansum,
         'denominator':denominator
         })
-    for l in tier_list: print (l) 
+
+    # 4.2.4. Loop for every row in rc intermonth list, then for every row tier list. Calculate and update rc intermonth list: append new column: rc tier price = average DSP tier A + average DSP tier B
+    for rc_intermonth in rc_intermonth_list:
+        tierprice = 0
+        for tier in tier_list:
+            if tier['denominator'] != 0:
+                if rc_intermonth['comm'] == tier['comm'] and rc_intermonth['tiera'] == tier['tier']: # average DSP tier A
+                    tierprice += tier['pricesum']/tier['denominator']
+                if rc_intermonth['comm'] == tier['comm'] and rc_intermonth['tierb'] == tier['tier']: # average DSP tier B
+                    tierprice += tier['pricesum']/tier['denominator']
+        rc_intermonth['tierprice'] = tierprice
+    
+    # print ("tier price per intermonth tier")
+    # for l in rc_intermonth_list: print (l) 
+
+    # 4.2.5. loop for every row in "intermonth list", then "RC intermonth list": append new column: rc intermonth spread = rate (from cons file) * avg tier A price + avg tier B price (calculated above)
+    for intermonth in intermonth_list: # if inter month percentages not specified in rc inter month file, "NA" added instead of stretched intermonth
+        appended = False
+        for rc_intermonth in rc_intermonth_list:
+            try:
+                if intermonth['comm'] == rc_intermonth['comm'] and intermonth['tiera'] == rc_intermonth['tiera'] and intermonth['tierb'] == rc_intermonth['tierb']:
+                    intermonth['rc_intermonth_spread'] = rc_intermonth['rate']*rc_intermonth['tierprice']
+                    appended = True
+                    break
+            except KeyError:
+                pass
+        if not appended:
+            intermonth['rc_intermonth_spread'] = "NA"
+    
+    # print ("Intermonth list with rc intermonth spread")
+    # for l in intermonth_list: print (l) 
+
+    return tier_list, instrument_list, rc_intermonth_list, intermonth_list
+
+### 4.3. calculate new intercom
+def calc_newintercomm (rc_intercomm_list,intercomm_list):  # multiply intercomm rate in intercomm cons file by 100. If not defined, take exisint intercomm value
+
+    # intercomm_list is now [commodity a, delta a, commodity b, delta b, spread, rc delta a, rc delta b, rc intercomm spread] 
+    # eg ['WMP',20,'SMP',29,30,20,29,40]. If there is no equivalent combo in rc intercomm csv as in original pa2 file, insert "N/A"
+    for intercomm in intercomm_list: 
+        appended = False
+        for rc_intercomm in rc_intercomm_list:
+            if intercomm['comma']== rc_intercomm['comma'] and intercomm['commb'] == rc_intercomm['commb']:
+                intercomm.update({
+                'rc_intercomm_deltaa':rc_intercomm['deltaa'],
+                'rc_intercomm_deltab':rc_intercomm['deltab'],
+                'rc_intercomm_rate':int(rc_intercomm['rate']*100)
+                })
+                appended = True
+                break
+        if not appended:
+            intercomm.update({
+            'rc_intercomm_deltaa':"NA",
+            'rc_intercomm_deltab':"NA",
+            'rc_intercomm_rate':"NA"
+            })
+
+    # print ("intercomm with RC data")
+    # for l in intercomm_list: print (l)
+
+    return intercomm_list
+
+### 4.4. write new intermonth and intercomm list
+def write_newinters(intermonth_list,intercomm_list,pa2_list):
+    # create new ampty list
+    new_intermonth_list = []
+    new_intercomm_list = []
+
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -531,8 +599,11 @@ for date in dates:  # loop for all date in dates list
     #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
     price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
 
-    calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   
+    tier_list, instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
 
+    intercomm_list = calc_newintercomm(rc_intercomm_list, intercomm_list)   # calculate rc intercomm and insert in intercomm list
+        
+    new_intermonth_list, new_intercomm_list = write_newinters(intermonth_list,intercomm_list,pa2_list)  
 
     #5. write risk capital pa2 file
     # new pa2 file wouldn't have new risk array calculated, has to be recalculated using whatif file
