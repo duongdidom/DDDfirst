@@ -928,14 +928,125 @@ def delta_adjust(option_list, deltascale_list, price_param_list, option_position
     # for l in option_position_list: print (l)
 
     for bpacc in sum_bpacc_list:    # loop sum bp account list
-        dalovsov = float(0)
-        for option_position in option_position_list:
-            if bpacc['bpacc'].startswith(option_position['bp']) and bpacc['bpacc'].endswith(option_position['acc']) and bpacc['curr'] == option_position['curr']:
-                # Sum so that BP and account matches to get delta adjusted net exposure 
-                # for options only (delta adjusted long options value minus short options value)
-                # per BP/account/currency
-                dalovsov = dalovsov + option_position['dane']
-        bpacc['dalovsov'] = dalovsov
+        deltalovsov = float(0)     # delta adjusted long option value minus short option value
+        for option_position in option_position_list:    # loop through option postion list finished above
+            if bpacc['bpacc'].startswith(option_position['bp']) and bpacc['bpacc'].endswith(option_position['acc']) and bpacc['curr'] == option_position['curr']:   # find matching bp, account, currency
+            # Check if 'bpacc', in sum_bpacc_list, starts with value of option_position_list 'bp'  
+               deltalovsov = deltalovsov + option_position['deltanetadj']
+        bpacc['deltalovsov'] = deltalovsov  # add column delta lov - sov to sum bpacc list
+    
+    # print ("sum bp account list with delta adj long opt - short opt")
+    # for l in sum_bpacc_list: print (l)
+
+    return option_position_list, sum_bpacc_list
+
+#11. read house csv file and store in a list
+def read_house(house_csv):
+    house_list = [] # create a default empty house list
+
+    with open(house_csv,"r") as f:
+        house_reader = list(csv.reader(f))
+    for line in house_reader:
+        try:
+            house_list.append({
+            'bp':str(line[0]).strip(),
+            'bpid':str(line[1]).strip(),
+            'acc':str(line[2]).strip()
+            })
+        except ValueError:
+            logging.error("Format of row = (" 
+                + str('%-2s ' * len(line))[:-1] % tuple(line) 
+                + ") in cons_house.csv is not as expected and has been ignored. "
+                "It should be SPAN BP, BPID, House margin account ref e.g. ADM, ADMU00000, Margin1")
+            
+    return house_list
+
+#12. read pbreq margin and pbreq rc files. Combine both to pbreq_list
+def read_pbreqs(pbreq_csv):
+    # open pbreq with identifier margin
+    tempfile = pbreq_csv + "margin.csv"
+    with open(tempfile, "r") as f:  # open pbreq_margin.csv file in read mode
+        pbreq_margin = [{k: v for k,v in row.items()} for row in csv.DictReader(f)] # store every row in pbreq in pbreq_margin dictionary
+        # column heading will be key in the dictionary
+
+    # open pbreq with identifier rc
+    tempfile = pbreq_csv + "rc.csv"
+    with open(tempfile, "r") as f:  # open pbreq_rc.csv file in read mode
+        pbreq_rc = [{k: v for k,v in row.items()} for row in csv.DictReader(f)] # store every row in pbreq in pbreq_rc dictionary
+
+    # take row in dictionaries where: node = curReq; ec = NZX; isM = 1 --> use those values in curreq_list. Where: node = curVal; ec = NZX --> use those values in curVal_list
+    # use identifier: margin / rc
+    curreq_list = []
+    curval_list = []
+    for pbreq_margin in pbreq_margin:
+        if pbreq_margin: # pbreqs have empty rows, so filter out blanks
+            if pbreq_margin['node'] == "curReq" and pbreq_margin['ec'] == "NZX" and str(pbreq_margin['isM']) == "1": # Unsure that isM = 1 is any different than 0?
+                curreq_list.append({
+                'identifier':"margin",
+                'bp':pbreq_margin['firm'],
+                'acc':pbreq_margin['acct'],
+                'curr':pbreq_margin['currency'],
+                'span':max(float(pbreq_margin['spanReq'])-float(pbreq_margin['anov']),0)    # span requirement = span req - net option value
+                })
+            elif pbreq_margin['node'] == "curVal" and pbreq_margin['ec'] == "NZX":
+                curval_list.append({
+                'identifier':"margin",
+                'bp':pbreq_margin['firm'],
+                'acc':pbreq_margin['acct'],
+                'curr':pbreq_margin['currency'],
+                'lfvsfv':float(pbreq_margin['lfv'])-float(pbreq_margin['sfv'])  #long future value - short future value??? 
+                }) # [identifier,bp,acc,currency,lfv-sfv]
+    
+    # print ("curreq Margin")
+    # for l in curreq_list: print (l)
+    # print ("curval Margin")
+    # for l in curval_list: print (l)
+    
+    for pbreq_rc in pbreq_rc:
+        if pbreq_rc:
+            if pbreq_rc['node'] == "curReq" and pbreq_rc['ec'] == "NZX" and str(pbreq_rc['isM']) == "1": # Unsure that isM = 1 is any different than 0?
+                curreq_list.append({
+                'identifier':"rc",
+                'bp':pbreq_rc['firm'],
+                'acc':pbreq_rc['acct'],
+                'curr':pbreq_rc['currency'],
+                'span':max(float(pbreq_rc['spanReq'])-float(pbreq_rc['anov']),0)
+                })
+
+            elif pbreq_rc['node'] == "curVal" and pbreq_rc['ec'] == "NZX":
+                try:        # DOUBLE CHECK: WHY HAVE TO TRY & EXCEPT??
+                    curval_list.append({
+                    'identifier':"rc",
+                    'bp':pbreq_rc['firm'],
+                    'acc':pbreq_rc['acct'],
+                    'curr':pbreq_rc['currency'],
+                    'lfvsfv':(float(pbreq_rc['lfv']) or 0)-float(pbreq_rc['sfv'])
+                    })
+                except:
+                    pass
+
+    # print ("curreq Margin")
+    # for l in curreq_list: print (l)
+    # print ("curval Margin")
+    # for l in curval_list: print (l)
+
+    # Merge curreq and curval
+    pbreq_list = []     # define an empty pbreq list
+    for curreq in curreq_list:
+        pbreq_list.append(copy.deepcopy(curreq)) # copy entire curreq_list to pbreq_list 
+
+    # for l in pbreq_list: print (l)
+
+    for pbreq in pbreq_list:    # loop pbreq list
+        for curval in curval_list:  # loop curval list
+            if pbreq['identifier'] == curval['identifier'] and pbreq['bp'] == curval['bp'] and pbreq['acc'] == curval['acc'] and pbreq['curr'] == curval['curr']:   # find matching margin/rc identifier, bp, acc, currency. 
+                pbreq['lfvsfv'] = curval['lfvsfv']
+                # add lfvsfv value for pbreq list from curval list
+    # pbreq_list is now [identifier,bp,acc,currency,min(spanreq-anov,0),lfv-sfv]
+
+    for l in pbreq_list: print (l)
+        
+    return pbreq_list
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -979,7 +1090,7 @@ for date in dates:  # loop for all date in dates list
 
     #8. write position file with sum positions
     write_newposition(position_list,sum_bpins_list,sum_position_txt)
-    """
+    
     #9. calculate and get report for:
     #9.1. margin
     margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_spn,spanit_txt) # write txt instruction for SPAN calculation: margin
@@ -991,13 +1102,15 @@ for date in dates:  # loop for all date in dates list
     rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
     call_SPAN(spanit_txt, "rc")
     call_SPAN_report(span_spn, pbreq_csv,"rc")
-    """
+    
     #10. calculate delta adjusted net exposure for options
     delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list)
 
     #11. read cons house file
+    house_list = read_house(house_csv)
 
     #12. read pbreq margin and pbreq risk capital files
+    pbreq_list = read_pbreqs(pbreq_csv)
 
     #13. use criteria rule to generate risk capital for each participant
 
