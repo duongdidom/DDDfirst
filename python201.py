@@ -1042,10 +1042,10 @@ def read_pbreqs(pbreq_csv):
             if pbreq['identifier'] == curval['identifier'] and pbreq['bp'] == curval['bp'] and pbreq['acc'] == curval['acc'] and pbreq['curr'] == curval['curr']:   # find matching margin/rc identifier, bp, acc, currency. 
                 pbreq['lfvsfv'] = curval['lfvsfv']
                 # add lfvsfv value for pbreq list from curval list
-    # pbreq_list is now [identifier,bp,acc,currency,min(spanreq-anov,0),lfv-sfv]
+    # pbreq_list is now [identifier,bp,acc,currency,max(spanreq-anov,0),lfv-sfv]
 
     for l in pbreq_list: print (l)
-        
+
     return pbreq_list
 
 ############################### MAIN ###############################
