@@ -800,10 +800,10 @@ def parse_position(position_list):
             'position':bpins['position']    # position per instrument
             })
 
-    print ("sum bp instrument with position")
-    for l in sum_bpins_list: print (l)
-    print ("option position list, sum account")
-    for l in option_position_list: print (l)
+    # print ("sum bp instrument with position")
+    # for l in sum_bpins_list: print (l)
+    # print ("option position list, sum account")
+    # for l in option_position_list: print (l)
 
     return sum_bpins_list, option_position_list, sum_bpacc_list
 
@@ -861,8 +861,81 @@ def call_SPAN_report(span_spn,pbreq_csv,identifier):    # open spn file and gene
         output_csv = csv.writer(output)
         output_csv.writerows(pbreq_reader)
 
+#10. calculate delta adjusted net exposure for options
+def delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list):
+    for option in option_list:  # loop through option list, originaly from pa2 file
+        appendeddelta = False
+        for deltascale in deltascale_list:  # loop through delta scaling list
+            if option['comm'] == deltascale['comm'] and option['instype'] == deltascale['instype'] and option['maturity'] == deltascale['maturity']:    # find matching commodity, type = OOF or OOP, matching maturity
+                option['deltasf'] = deltascale['deltasf']   # add another column 'deltasf' to option list
+                appendeddelta = True
+                break
+        if not appendeddelta:   # if delta is not appended
+            option['deltasf'] = "N/A"
 
+        appendedparams = False
+        for price_param in price_param_list:    # loop through price parameter list
+            if option['comm'] == price_param['comm'] and option['instype'] == price_param['instype']:   # find matching commodity, instrument type = OOP or OOF
+                option["dspdl"] = price_param["dspdl"]
+                option["strikedl"] = price_param["strikedl"]
+                option["strikeconv"] = float(option["strike"])/10**price_param["strikedl"]   # converted strike price 
+                option["cvf"] = price_param["cvf"]
+                option["curr"] = price_param["curr"]
+                appendedparams = True
+        if not appendedparams:
+            option["dspdl"] = "N/A"
+            option["strikedl"] = "N/A"
+            option["strikeconv"] = "N/A"
+            option["cvf"] = "N/A"
+            option["curr"] = "N/A"
 
+        appendeddsp = False
+        for instrument in instrument_list:  # loop through instrument list
+            if option['comm'] == instrument['comm'] and option['instype'] == instrument['instype'] and option['maturity'] == instrument['maturity']:    # find matchin commodity, option type, maturity
+                option['underlyingdspconv'] = instrument['dspconv']     # update underlying dsp converted to 
+                appendeddsp = True
+                break
+        if not appendeddsp:
+            option['underlyingdspconv'] = "NA"
+
+    # print ("option list with delta scaling factor, dsp decimal locator, strike decimal locator, strike converted, contract size, currency, underlying dsp converted")
+    # for l in option_list: print (l)
+
+    for option_position in option_position_list:    # loop through option position list
+        appendedposi = False
+        for option in option_list:  # loop through option list
+            if (option_position['comm'] == option['comm'] and
+                option_position['maturity'] == option['maturity'] and
+                option_position['instype'] == option['instype'] and
+                option_position['strikeconv'] == option['strikeconv'] and
+                option_position['callput'] == option['callput']):
+            # find matching commodity, maturity, option type, strike price, call or put
+                # add columns to option position list
+                option_position["delta"] = float(option["delta"])/option["deltasf"]
+                option_position["underlyingdspconv"] = option["underlyingdspconv"]
+                option_position["deltanetadj"] = option_position["position"]* (float(option["delta"])/option['deltasf'])*option['underlyingdspconv']    # delta net adjusted position = net position * delta * underlying dsp
+                option_position["curr"] = option["curr"]
+                appendedposi = True
+        if not appendedposi:
+            option_position.update({
+                'delta':"NA",
+                'underlyingdspconv':"NA",
+                'deltanetadj':"NA",
+                'curr':"NA"
+                })
+    
+    # print ("option position with delta net adjusted position")
+    # for l in option_position_list: print (l)
+
+    for bpacc in sum_bpacc_list:    # loop sum bp account list
+        dalovsov = float(0)
+        for option_position in option_position_list:
+            if bpacc['bpacc'].startswith(option_position['bp']) and bpacc['bpacc'].endswith(option_position['acc']) and bpacc['curr'] == option_position['curr']:
+                # Sum so that BP and account matches to get delta adjusted net exposure 
+                # for options only (delta adjusted long options value minus short options value)
+                # per BP/account/currency
+                dalovsov = dalovsov + option_position['dane']
+        bpacc['dalovsov'] = dalovsov
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -906,7 +979,7 @@ for date in dates:  # loop for all date in dates list
 
     #8. write position file with sum positions
     write_newposition(position_list,sum_bpins_list,sum_position_txt)
-
+    """
     #9. calculate and get report for:
     #9.1. margin
     margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_spn,spanit_txt) # write txt instruction for SPAN calculation: margin
@@ -918,7 +991,7 @@ for date in dates:  # loop for all date in dates list
     rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
     call_SPAN(spanit_txt, "rc")
     call_SPAN_report(span_spn, pbreq_csv,"rc")
-
+    """
     #10. calculate delta adjusted net exposure for options
     delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list)
 
