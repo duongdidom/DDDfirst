@@ -8,6 +8,7 @@ from datetime import datetime, date, timedelta   # import datetime module to con
 import shutil   # import shutil module to copy file
 import csv      # import csv to read csv file
 import copy     # import copy to copy from (sum bp account w/o currency) to (sum bp account with currency)
+import subprocess   # import subprocess module to call another application
 
 # define start date and end date
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
@@ -72,7 +73,7 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
     spanit_txt = parent_dir + r"\\out\\" + out_timestamp + r"spanit_" 
     # Leave out file extension to add identifier in write_margin/rc_spanit function
     span_spn = parent_dir + r"\\out\\" + out_timestamp + r"span_" 
-    # Leave out file extension to add identifier in call_span_report function
+    # Leave out file extension to add identifier in call_SPAN_report function
     pbreq_csv =  parent_dir + r"\\out\\" + out_timestamp + r"pbreq_" 
     final_csv = parent_dir + r"\\out\\" + out_timestamp + r"final.csv"
 
@@ -817,6 +818,52 @@ def write_newposition(position_list,sum_bpins_list,sum_position_txt):
         for bpins in sum_bpins_list:
             f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")    # add position for sum account
 
+#9. write instruction to tell SPAN calculating margin, then save report.  
+### 9.1. write instruction in txt file, for margin calculation purpose. Remove identifier variable as this script only use for margin calculation
+def margin_SPAN_instruction(pa2_pa2,position_txt,span_spn,spanit_txt):
+    with open(spanit_txt + "margin.txt", "w") as f:  # open SPAN instruction txt file in write mode
+        f.write ("Load" + pa2_pa2 + "\n")   # load original pa2
+        f.write ("Load" + position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
+        f.write ("Calc" + "\n") # calculate
+        f.write ("Save " + span_spn + "margin.spn" + "\n") # save as spn file
+    return spanit_txt
+
+### 9.2. write instruction in txt file, for risk capital calculation purpose. 
+def rc_SPAN_instruction(new_pa2,whatif_xml,position_txt,span_spn,spanit_txt):
+    with open(spanit_txt + "rc.txt", "w") as f:
+        f.write("Load " + new_pa2 + "\n")
+        f.write("Load " + position_txt + "\n") 
+        f.write("SelectPointInTime" + "\n")
+        f.write("ApplyWhatIf " + whatif_xml + "\n")
+        f.write("CalcRiskArray" + "\n")
+        f.write("Calc" + "\n")
+        f.write("Save " + span_spn + "rc.spn\n")    
+    return spanit_txt
+
+### 9.A run SPAN, given instruction text file
+def call_SPAN(spanit_txt, identifier):
+    os.chdir (r"C:\span4\bin")  # os.chdir = change current working directory path
+    subprocess.call(["spanitrm.exe", spanit_txt + identifier + ".txt"])
+
+### 9.B generate SPAN report
+def call_SPAN_report(span_spn,pbreq_csv,identifier):    # open spn file and generate pbreq.csv file. Add identifier to distinguish margin/rc pbreq
+# the input spn file must have already have pa2 and position files combined
+# mshta must be given an absolute pathname, not a relative one
+# this process does not work with filenames containing spaces " "
+    os.chdir(r"C:\span4\Reports")
+    subprocess.call(["mshta.exe", r"C:\span4\rptmodule\spanReport.hta", span_spn + identifier + ".spn"])
+
+    # Convert spanReport.hta output (Link AP\C:\span4\Reports\PB Req Delim.txt) to (parent directory + \YYYYMMDD-hhmmss_pbreq_identifier.csv)
+    pbreq_txt = r"C:\Span4\Reports\PB Req Delim.txt"
+    pbreq_full_csv = pbreq_csv + identifier + ".csv"
+    pbreq_reader = csv.reader( open(pbreq_txt,"r"), delimiter = ',')
+    with open(pbreq_full_csv , "w") as output:
+        output_csv = csv.writer(output)
+        output_csv.writerows(pbreq_reader)
+
+
+
+
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
 
@@ -862,10 +909,18 @@ for date in dates:  # loop for all date in dates list
 
     #9. calculate and get report for:
     #9.1. margin
+    margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_spn,spanit_txt) # write txt instruction for SPAN calculation: margin
+    # insert sum position txt here to calculate margin for sum account as well
+    call_SPAN(spanit_txt, "margin")
+    call_SPAN_report(span_spn, pbreq_csv,"margin")
 
     #9.2. risk capital
+    rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
+    call_SPAN(spanit_txt, "rc")
+    call_SPAN_report(span_spn, pbreq_csv,"rc")
 
     #10. calculate delta adjusted net exposure for options
+    delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list)
 
     #11. read cons house file
 
