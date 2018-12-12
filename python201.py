@@ -958,7 +958,8 @@ def read_house(house_csv):
                 + str('%-2s ' * len(line))[:-1] % tuple(line) 
                 + ") in cons_house.csv is not as expected and has been ignored. "
                 "It should be SPAN BP, BPID, House margin account ref e.g. ADM, ADMU00000, Margin1")
-            
+    print("house list")
+    for l in house_list: print (l)        
     return house_list
 
 #12. read pbreq margin and pbreq rc files. Combine both to pbreq_list
@@ -1044,9 +1045,32 @@ def read_pbreqs(pbreq_csv):
                 # add lfvsfv value for pbreq list from curval list
     # pbreq_list is now [identifier,bp,acc,currency,max(spanreq-anov,0),lfv-sfv]
 
-    for l in pbreq_list: print (l)
+    # print ("Pb req: margin and rc combine")
+    # for l in pbreq_list: print (l)
 
     return pbreq_list
+
+#13. retrieve from pbreq list, bp account with sum a/c list, house list, currency list. Generate final rc based on our criteria rule
+def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
+    bp_list = []        # create empty list first
+    bp_final_list = []  # create empty list first
+    for bpacc in sum_bpacc_list:    # loop through account list
+        margin = float(0)
+        stressl = float(0)  # stress loss
+        lfvsfc = float(0)   # long future value - short future value
+        # Append all spanreq-anov from pbreq_list to sum_bpacc_list
+        # sum_bpacc_list now [bp+acc,curr,delta long opt value-short opt value,lfv-sfv,rc,margin]
+        for pbreq in pbreq_list:    # loop thought pbreq list
+            if bpacc['bpacc'].startswith(pbreq['bp']) and bpacc['bpacc'].endswith(pbreq['acc']) and bpacc['curr'] == pbreq['curr']: # find matching BP and account and currency
+                if pbreq['identifier'] == "rc": # case identifier = rc
+                    stressl = pbreq['span']
+                    lfvsfv = pbreq['lfvsfv']
+                elif pbreq['identifier'] == "margin":   # case identifier = margin
+                    margin = pbreq['span']
+                    lfvsfv = pbreq['lfvsfv'] 
+        
+
+
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -1113,5 +1137,6 @@ for date in dates:  # loop for all date in dates list
     pbreq_list = read_pbreqs(pbreq_csv)
 
     #13. use criteria rule to generate risk capital for each participant
-
+    parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+    
     #14. write final excel file
