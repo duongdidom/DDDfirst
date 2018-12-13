@@ -958,8 +958,8 @@ def read_house(house_csv):
                 + str('%-2s ' * len(line))[:-1] % tuple(line) 
                 + ") in cons_house.csv is not as expected and has been ignored. "
                 "It should be SPAN BP, BPID, House margin account ref e.g. ADM, ADMU00000, Margin1")
-    print("house list")
-    for l in house_list: print (l)        
+    # print("house list")
+    # for l in house_list: print (l)        
     return house_list
 
 #12. read pbreq margin and pbreq rc files. Combine both to pbreq_list
@@ -1053,11 +1053,12 @@ def read_pbreqs(pbreq_csv):
 #13. retrieve from pbreq list, bp account with sum a/c list, house list, currency list. Generate final rc based on our criteria rule
 def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
     bp_list = []        # create empty list first
-    bp_final_list = []  # create empty list first
+    bp_unique_list = []  # create empty list first
+
     for bpacc in sum_bpacc_list:    # loop through account list
         margin = float(0)
         stressl = float(0)  # stress loss
-        lfvsfc = float(0)   # long future value - short future value
+        lfvsfv = float(0)   # long future value - short future value
         # Append all spanreq-anov from pbreq_list to sum_bpacc_list
         # sum_bpacc_list now [bp+acc,curr,delta long opt value-short opt value,lfv-sfv,rc,margin]
         for pbreq in pbreq_list:    # loop thought pbreq list
@@ -1068,9 +1069,183 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
                 elif pbreq['identifier'] == "margin":   # case identifier = margin
                     margin = pbreq['span']
                     lfvsfv = pbreq['lfvsfv'] 
+        bpacc.update({
+        'lfvsfv':lfvsfv,
+        'stressl':stressl,
+        'margin':margin
+        })
+
+        # append to sum_bpacc_list whether the account is house or client or Sum account
+        # sum_bpacc_list now [bp+acc,curr,delta long opt value-short opt value,lfv-sfv,rc,margin, house/client/sum]
+        appended = False
+        for house in house_list:
+            if bpacc['bpacc'].startswith(house['bp']) and bpacc['bpacc'].endswith(house['acc']):
+                bpacc['acctype'] = "House"
+                appended = True
+                break
+            elif bpacc['bpacc'].endswith("Sum"):
+                bpacc['acctype'] = "Sum"
+                appended = True
+                break
+        if not appended:
+            bpacc['acctype'] = "Client"
         
+        # Insert into bplist just the BPs from sum_bpacc_list
+        bp_list.append(bpacc['bpacc'][:3])
 
+    # print ("bp list")
+    # for l in bp_list: print (l)
 
+    # get USD:NZD fx rate from currency_list
+    for curr in currency_list:
+        if curr['curra'] == "USD" and curr['currb'] == "NZD":
+            usdnzd = curr['rate']
+
+    # do calculation for delta adjusted net exposure, uncovered stress loss, currency conversion in sum bp acc list
+    # sum_bpacc_list now [bp+acc,curr,lfo-sfo,lfv-sfv,rc,margin,house/client, delta net exposure unconverted,rc unconverted, delta net exposure converted, rc converted]
+    for bpacc in sum_bpacc_list:    # loop through sum bp acc list
+        bpacc['deltanetexps'] = bpacc['lfvsfv']+bpacc['deltalovsov']    # Get delta adjusted net exposure by summing (long future value -short future value) + (long opt value-short opt value)
+        bpacc['rc'] = max(bpacc['stressl']-bpacc['margin'],0)    # Get rc by taking uncovered losses minus margin. Use 0 if the difference is negative
+        # Convert USD to NZD
+        if bpacc['curr'] == "USD":
+            bpacc.update({
+            'deltanetexpsconv':bpacc['deltanetexps'] * usdnzd, # USD delta net exposure converted to NZD
+            'rcconv': bpacc['rc'] * usdnzd, # USD rc converted to NZD
+            'marginconv': bpacc['margin'] * usdnzd, # margin converted to nzd
+            'stresslconv': bpacc['stressl'] * usdnzd # stress loss converted to nzd
+            })
+        elif bpacc['curr'] == "NZD":
+            bpacc.update({
+            'deltanetexpsconv':bpacc['deltanetexps'], # = NZD delta net exposure
+            'rcconv': bpacc['rc'], # = NZD rc
+            'marginconv': bpacc['margin'],
+            'stresslconv': bpacc['stressl']
+            })
+    
+    # print ("sum bp account list")
+    # for l in sum_bpacc_list: print (l)    
+
+    # Remove duplicates of BPs
+    bp_final_strings = list(set(bp_list))   # convert bp list in a set, to remove duplicate data, then convert it back into list.
+    for line in bp_final_strings:
+        bp_unique_list.append({'bp':line})   # create a dictionary kind of list where bp_unique_list looks like [{'bp': 'OMF'}, {'bp': 'FCS'}]
+    
+    # filter, modify, risk capital using logic defined by Risk team: gain 
+    for bp in bp_unique_list:   # loop through unique list of bp
+        longclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}    # create long client dictionary
+        shortclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}   # create short client dictionary
+        house = {'deltanetexpsconv':float(0),'rcconv':float(0),'marginconv':float(0)}
+        houseexist = False
+        
+        # grab delta net exposure, rc of long client, rc of short client
+        for bpacc in sum_bpacc_list:    # loop through sum bp account list
+            if bpacc['bpacc'].startswith(bp['bp']) and not bpacc['bpacc'].endswith("Sum"):  # condition on not sum account
+                if bpacc['acctype'] == "House" and bpacc['deltanetexpsconv'] > 0:   # house and positive delta adjusted net exposure. DOUBLE CHECK: positive delta adj net exposure means profit? 
+                    house['deltanetexpsconv'] += bpacc['deltanetexpsconv'] # delta adjusted net exposure
+                    house['rcconv'] += bpacc['rcconv'] # rc
+                    house['marginconv'] += bpacc['marginconv'] #margin
+                    houseexist = True
+                elif bpacc['acctype'] == "Client" and bpacc['deltanetexpsconv'] > 0:    # client account and positive delta net exposure conversion
+                    longclient['deltanetexpsconv'] += bpacc['deltanetexpsconv'] # delta adjusted net exposure
+                    longclient['rcconv'] += bpacc['rcconv'] # rc
+                elif bpacc['acctype'] == "Client" and bpacc['deltanetexpsconv'] < 0:    # client account and negative delta net exposure conversion
+                    shortclient['deltanetexpsconv'] += bpacc['deltanetexpsconv'] # delta adjusted net exposure
+                    shortclient['rcconv'] += bpacc['rcconv'] # rc
+        
+        # applying the rule by Risk team
+        if not houseexist:
+            # if there is no house delta adjusted net exposure, take max of sum rc of(positive delta adjusted net exposure clients) and sum rc of(negative delta adjusted net exposure clients)
+            shortrc = shortclient['rcconv']
+            longrc = longclient['rcconv']    
+        elif house['deltanetexpsconv'] > 0:
+            # house and opposing client(s) may be offset using house margin
+            shortrc = -house['marginconv'] + shortclient['rcconv']
+            longrc = house['rcconv'] + longclient['rcconv']
+        elif house['deltanetexpsconv'] < 0:
+            # house and opposing client(s) may be offset using house margin
+            shortrc = house['rcconv'] + shortclient['rcconv']
+            longrc = -house['marginconv'] + longclient['rcconv']
+        elif house['deltanetexpsconv'] == 0:
+            # unlikely but possible that there is house rc with dane = 0, but if so count on both sides
+            shortrc = shortclient['rcconv'] + house['rcconv']
+            longrc = longclient['rcconv'] + house['rcconv']
+        else: # shouldn't reach here, but just in case
+            longrc = shortrc = house['rcconv'] + longclient['rcconv'] + shortclient['rcconv']
+        
+        # add column rc converted to bp unique list
+        bp['rcconv'] = max(shortrc, longrc)
+    
+    print ("bp unique list")
+    for l in bp_unique_list: print (l)
+    
+    # For final rc figure, use higher of rcconv in bp_unique_list vs Sum(rcconv) in sum_bpacc_list
+    for bp in bp_unique_list:   # loop through unique list of bp
+        finalrc = float(0)
+        sumsums = float(0)
+        for bpacc in sum_bpacc_list:    # loop through bp account with sum account list
+            if bpacc['bpacc'].endswith("Sum") and bpacc['bpacc'].startswith(bp['bp']):  # condition on account is Sum a/c
+                sumsums = sumsums + bpacc['rcconv'] # add all rc converted for Sum account together. Have to loop because Sum account would have different currency too
+        finalrc = max(bp['rcconv'],sumsums) # final rc = higher of rc converted in unique list vs rc converted in Sum account. We find out that rc converted in unique list would always be used because Sum account is more diversified, therefore lower rc 
+        # add rows for each bp: inserting rc converted for rule, and rc final 
+        sum_bpacc_list.append({
+        'bpacc':bp['bp']+"Rule",
+        'curr':"NZD",
+        'acctype':"Rule",        
+        'rcconv':bp['rcconv']
+        })
+        sum_bpacc_list.append({
+        'bpacc':bp['bp']+"Final",
+        'curr':"NZD",
+        'acctype':"Final",        
+        'rcconv':finalrc
+        })
+    
+    # Add bpid column to sum_bpacc_list, if not specified in cons_house.csv, default to truncated BP
+    for bpacc in sum_bpacc_list:
+        appendedbpid = False
+        for house in house_list:
+            if bpacc['bpacc'][:3] == house['bp']:
+                bpacc['bpid'] = house['bpid']
+                appendedbpid = True
+                break
+        if not appendedbpid:
+            bpacc['bpid'] = bpacc['bpacc']
+            logging.error(bpacc['bpacc'][:3] + " BPID is not in cons_house.csv")
+    
+    print ("bp accounts with sum a/c final rc")
+    for l in sum_bpacc_list: print (l)
+
+    return pbreq_list, sum_bpacc_list
+
+#14. write final csv file
+def write_rc(sum_bpacc_list,final_csv):
+    with open(final_csv, "w") as f:
+        f.write("BPID,Account,Currency,Delta adjusted net exposure,Stress Losses,Margin,"
+            "Intermediate RC,Delta adjusted net exposure (NZD),Stress Losses (NZD),"
+            "Margin (NZD),Intermediate RC (NZD)\n")
+
+        print ("bp accounts with sum a/c final rc")
+        for l in sum_bpacc_list: print (l)
+        
+        for bpacc in sum_bpacc_list:
+            try:
+                f.write(bpacc['bpid']+","
+                    +bpacc['bpacc'][3:]+","
+                    +str(bpacc['curr'])+","
+                    +str(bpacc['deltanetexps'])+","
+                    +str(bpacc['stressl'])+","
+                    +str(bpacc['margin'])+","
+                    +str(bpacc['rc'])+","
+                    +str(bpacc['deltanetexpsconv'])+","
+                    +str(bpacc['stresslconv'])+","
+                    +str(bpacc['marginconv'])+","
+                    +str(bpacc['rcconv'])+"\n")
+            except KeyError:
+                f.write(bpacc['bpid']+","
+                    +bpacc['bpacc'][3:]+","
+                    +str(bpacc['curr'])
+                    +",,,,,,,,"
+                    +str(bpacc['rcconv'])+"\n")
 
 ############################### MAIN ###############################
 dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
@@ -1137,6 +1312,7 @@ for date in dates:  # loop for all date in dates list
     pbreq_list = read_pbreqs(pbreq_csv)
 
     #13. use criteria rule to generate risk capital for each participant
-    parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+    pbreq_list, sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
     
     #14. write final excel file
+    write_rc(sum_bpacc_list,final_csv)
