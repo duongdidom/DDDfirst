@@ -818,6 +818,24 @@ def write_newposition(position_list,sum_bpins_list,sum_position_txt):
         for bpins in sum_bpins_list:
             f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")    # add position for sum account
 
+#8.b Write new function to force ALL accounts in position txt file to be M instead of O. So that SPAN calculated stress loss on Net Position basis.
+def write_newposition_rc(position_list,sum_bpins_list,sum_position_file):
+    with open(sum_position_file, "w") as f:
+        for position in position_list:
+            if position.startswith("2"):
+                # accounttype force OCUST to MHOUS
+                accounttype = position.strip()[24:29] 
+                if accounttype != 'MHOUS':
+                    # REPLACE WITH MHOUS FOR RC (otherwise there will be a duplicate in for bp in PC-SPAN)
+                    accounttype = 'MHOUS' 
+                # Use string from orig pos file to write BPID and Account number as well as Sum Account lines.
+                f.write(position.strip()[:24]+accounttype+position.strip()[29:]+"\n")
+                f.write(position.strip()[:4]+"Sum".ljust(20," ")+accounttype+position.strip()[29:]+"\n")
+            else:
+                f.write(position)
+        for bpins in sum_bpins_list:
+            f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")
+
 #9. write instruction to tell SPAN calculating margin, then save report.  
 ### 9.1. write instruction in txt file, for margin calculation purpose. Remove identifier variable as this script only use for margin calculation
 def margin_SPAN_instruction(pa2_pa2,position_txt,span_spn,spanit_txt):
