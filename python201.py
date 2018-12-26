@@ -288,7 +288,7 @@ def parse_pa2(pa2_list): # from pa2 list, which is from original pa2 file, break
     # for l in instrument_list: print (l) 
 
     return (price_list, intermonth_list, intermonth_param_list, intercomm_list,
-        intercomm_param_list, instrument_list, option_list, deltascale_list,
+        instrument_list, option_list, deltascale_list,
         price_param_list, currency_list)
 
 #3. read 3 constant files: transfer data from file to list
@@ -542,7 +542,7 @@ def calc_newintermonth(instrument_list,intermonth_param_list,intermonth_list,rc_
     # print ("Intermonth list with rc intermonth spread")
     # for l in intermonth_list: print (l) 
 
-    return tier_list, instrument_list, rc_intermonth_list, intermonth_list
+    return instrument_list, rc_intermonth_list, intermonth_list
 
 ### 4.3. calculate new intercom
 def calc_newintercomm (rc_intercomm_list,intercomm_list):  # multiply intercomm rate in intercomm cons file by 100. If not defined, take exisint intercomm value
