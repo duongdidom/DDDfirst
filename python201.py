@@ -1,6 +1,6 @@
 # # Breakdown and recreate Risk Capital calculation script
-# up to line 558 original 
 
+from __future__ import division     # import division so that / is mapped to __truediv__() and return more decimals figure
 import logging  # import logging to log any error
 import os   # import os module to change working directory
 import glob     # import glob module to file list of filename that match certain criteria
@@ -1266,71 +1266,81 @@ def write_rc(sum_bpacc_list,final_csv):
                     +str(bpacc['rcconv'])+"\n")
 
 ############################### MAIN ###############################
-dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
+def main():
+    dates = [startD + timedelta(x) for x in range(0, (endD-startD).days)]   # for each x from 0 to count number days between start date and end date, convert x from integer to date. Then plus that number to start date. Put that into a list
 
-hhmmss = datetime.now().strftime("%H%M%S")  # define execution time to create time stamp in output files. strftime = string format time = format time string
+    hhmmss = datetime.now().strftime("%H%M%S")  # define execution time to create time stamp in output files. strftime = string format time = format time string
 
-for date in dates:  # loop for all date in dates list
-    #1. Collect input files (cons, input). Define newly created file and path. 
-    (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
-    
-    #2. read pa2 file & store data into various lists
-    pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
-    
-    (price_list, intermonth_list, intermonth_param_list, intercomm_list,
-            intercomm_param_list, instrument_list, option_list, deltascale_list,
-            price_param_list, currency_list) = parse_pa2(pa2_list)  # break down from pa2 big list to several smaller list
-    
-    #3. read 3 constant files. Read from file to list
-    (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
-
-    #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
-    price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
-
-    tier_list, instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
-
-    intercomm_list = calc_newintercomm(rc_intercomm_list, intercomm_list)   # calculate rc intercomm and insert in intercomm list
+    for date in dates:  # loop for all date in dates list
+        #1. Collect input files (cons, input). Define newly created file and path. 
+        (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
         
-    new_intermonth_list, new_intercomm_list = write_newinters(intermonth_list,intercomm_list,pa2_list)  
+        #2. read pa2 file & store data into various lists
+        pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
+        
+        (price_list, intermonth_list, intermonth_param_list, intercomm_list,
+                instrument_list, option_list, deltascale_list,
+                price_param_list, currency_list) = parse_pa2(pa2_list)  # break down from pa2 big list to several smaller list
+        
+        #3. read 3 constant files. Read from file to list
+        (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams(rc_scan_csv,rc_intermonth_csv,rc_intercomm_csv)
 
-    #5. write risk capital pa2 file
-    # new pa2 file wouldn't have new risk array calculated, has to be recalculated using whatif file
-    write_new_pa2(pa2_list,new_intermonth_list,new_intercomm_list,new_pa2)
+        #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
+        price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
 
-    #6. write whatif file which has scans adjusted
-    write_whatif(instrument_list,whatif_xml)
+        instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
 
-    #7. read position file & break it down into smaller pieces
-    position_list = read_position(position_txt)    # read and store it into list
-    
-    sum_bpins_list, option_position_list, sum_bpacc_list = parse_position(position_list)    # break down into several other lists
+        intercomm_list = calc_newintercomm(rc_intercomm_list, intercomm_list)   # calculate rc intercomm and insert in intercomm list
+            
+        new_intermonth_list, new_intercomm_list = write_newinters(intermonth_list,intercomm_list,pa2_list)  
 
-    #8. write position file with sum positions
-    write_newposition(position_list,sum_bpins_list,sum_position_txt)
-    
-    #9. calculate and get report for:
-    #9.1. margin
-    margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_spn,spanit_txt) # write txt instruction for SPAN calculation: margin
-    # insert sum position txt here to calculate margin for sum account as well
-    call_SPAN(spanit_txt, "margin")
-    call_SPAN_report(span_spn, pbreq_csv,"margin")
+        #5. write risk capital pa2 file
+        # new pa2 file wouldn't have new risk array calculated, has to be recalculated using whatif file
+        write_new_pa2(pa2_list,new_intermonth_list,new_intercomm_list,new_pa2)
 
-    #9.2. risk capital
-    rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
-    call_SPAN(spanit_txt, "rc")
-    call_SPAN_report(span_spn, pbreq_csv,"rc")
-    
-    #10. calculate delta adjusted net exposure for options
-    delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list)
+        #6. write whatif file which has scans adjusted
+        write_whatif(instrument_list,whatif_xml)
 
-    #11. read cons house file
-    house_list = read_house(house_csv)
+        #7. read position file & break it down into smaller pieces
+        position_list = read_position(position_txt)    # read and store it into list
+        
+        sum_bpins_list, option_position_list, sum_bpacc_list = parse_position(position_list)    # break down into several other lists
 
-    #12. read pbreq margin and pbreq risk capital files
-    pbreq_list = read_pbreqs(pbreq_csv)
+        #8. write position file with sum positions
+        write_newposition(position_list,sum_bpins_list,sum_position_txt)
+        write_newposition_rc(position_list,sum_bpins_list,sum_position_txt)
+        
+        #9. calculate and get report for:
+        #9.1. margin
+        margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_spn,spanit_txt) # write txt instruction for SPAN calculation: margin
+        # insert sum position txt here to calculate margin for sum account as well
+        call_SPAN(spanit_txt, "margin")
+        call_SPAN_report(span_spn, pbreq_csv,"margin")
 
-    #13. use criteria rule to generate risk capital for each participant
-    pbreq_list, sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
-    
-    #14. write final excel file
-    write_rc(sum_bpacc_list,final_csv)
+        #9.2. risk capital
+        rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
+        call_SPAN(spanit_txt, "rc")
+        call_SPAN_report(span_spn, pbreq_csv,"rc")
+        
+        #10. calculate delta adjusted net exposure for options
+        delta_adjust(option_list, deltascale_list, price_param_list, option_position_list, sum_bpacc_list, instrument_list)
+
+        #11. read cons house file
+        house_list = read_house(house_csv)
+
+        #12. read pbreq margin and pbreq risk capital files
+        pbreq_list = read_pbreqs(pbreq_csv)
+
+        #13. use criteria rule to generate risk capital for each participant
+        pbreq_list, sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+        
+        #14. write final excel file
+        write_rc(sum_bpacc_list,final_csv)
+
+# if this python is run directly, run main(); else do not run main()
+# before running anything, Python interpreter will define a few variables such as __name__. And if the script is run directly, variable __name__ will take value __main__
+if __name__ == "__main__":
+    print ("run directly")
+    main()
+else:
+    print ("not run directly")
