@@ -12,8 +12,8 @@ import subprocess   # import subprocess module to call another application
 
 # define start date and end date
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
-startD = datetime.strptime("09/11/2018", "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
-endD = datetime.strptime("10/11/2018", "%d/%m/%Y")      # output would be in date format, not string format
+startD = datetime.strptime("16/11/2018", "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
+endD = datetime.strptime("17/11/2018", "%d/%m/%Y")      # output would be in date format, not string format
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
 parent_dir = r"C:\Users\douglas.cao\Documents\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
@@ -718,14 +718,31 @@ def parse_position(position_list):
     option_position_list = []   # every option position per bp per ac. This is usefule for delta adjustment net exposure later on
     bpacc_list = []     # every account name per bp, add sum account for each bp
     sum_bpacc_list = []
+    omni_acc_list = []  # list of omnibus/client account
 
-    # 7.2.2. loop through position list and fill in data for those lists above
+    # 7.2.2. if omnibus/client, add accountname to omni_acc_list
+    for position in position_list: 
+        if position.startswith("2"): 
+            accountname = position.strip()[1:11]
+            accounttype = position.strip()[24:29]
+            if accounttype == 'OCUST':
+                omni_acc_list.append(accountname)  
+
+    # 7.2.3. loop through position list and fill in data for those lists above
     for position in position_list:
         if position.startswith("5"):
+            # Check if accountname is in the omni_acc_list list. If it is, assign True/False to Boolean variable isOmniAccount
+            accountname = position.strip()[1:11]
+            isOmniAccount = False
+            if accountname in omni_acc_list:
+                isOmniAccount = True
+                logging.info(accountname + " is OCUST account.") 
+
             # list of BP+instr,net position [BP+instr chunk,net position]
             record5_list.append({
             'bpins':str(position[1:4])+str(position[24:92]),
-            'position':int(position[92:100].strip() or 0)
+            'position':int(position[92:100].strip() or 0),
+            'isOmni':bool(isOmniAccount)    # add isOmniAccount boolean variable to record5 list
             })  # record 5 break down to instrument and position per instrument
 
             # list of BP+instr [BP+instr chunk]
@@ -758,7 +775,7 @@ def parse_position(position_list):
     # print ("option position list")
     # for l in option_position_list: print (l)
     
-    # 7.2.3. remove duplicates in bp instrument list & bp account list and insert to sum bp instrument and sum bp account lists. DOUBLE CHECK HOW THIS WORKS
+    # 7.2.4. remove duplicates in bp instrument list & bp account list and insert to sum bp instrument and sum bp account lists. DOUBLE CHECK HOW THIS WORKS
     # this is preparation step for creating sum accounts
     sum_bpins_list = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bpins_list)]
     sum_bpacc_list_nocurr = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bpacc_list)]  # sum bp account, no currency
@@ -768,7 +785,7 @@ def parse_position(position_list):
     # print ("sum bp account list without currency")
     # for l in sum_bpacc_list_nocurr: print (l)
 
-    # 7.2.4. for each account in summ account list, add currency NZD & USD. I.e. duplicate numbers of rows in the list. 
+    # 7.2.5. for each account in summ account list, add currency NZD & USD. I.e. duplicate numbers of rows in the list. 
     for bpacc in sum_bpacc_list_nocurr:
         bpacc['curr'] = "USD"
         sum_bpacc_list.append(copy.deepcopy(bpacc))
@@ -778,14 +795,15 @@ def parse_position(position_list):
     # print ("sum bp account list with currency")
     # for l in sum_bpacc_list: print (l) 
 
-    # 7.2.5. create sum position per bp
+    # 7.2.6. create sum position per bp
     for bpins in sum_bpins_list:
         # first, add column position in sum position list, & set to 0
         bpins['position'] = 0 
 
-        # loop through record 5
+        # loop through record 5 and sum for the same BP and instrument combo. Exclude omnibus client accounts from Sum rule. 
         for record5 in record5_list:            
-            if bpins['bpins'] == record5['bpins']:  # if match bp and instrument
+            if bpins['bpins'] == record5['bpins'] and not record5['isOmni']: 
+            ### OLD CODE ### if bpins['bpins'] == record5['bpins']:  # if match bp and instrument
                 bpins['position'] = bpins['position'] + record5['position'] # add record 5 position to sum pb position
 
         # add the whole summed record into the options list too
@@ -815,7 +833,12 @@ def write_newposition(position_list,sum_bpins_list,sum_position_txt):
         for position in position_list:  # loop through position list, (from original position file)
             f.write(position)   # write every row in position list to sum position file
             if position.startswith("2"):    # for record type 2 = list of accounts
-                f.write(position.strip()[:4]+"Sum".ljust(20," ")+position.strip()[24:]+"\n")     # add account named "Sum"
+                # accounttype: force OCUST to MHOUS
+                accounttype = position.strip()[24:29] 
+                if accounttype != 'MHOUS':
+                    # REPLACE WITH MHOUS FOR RC (otherwise there will be a duplicate in for bp in PC-SPAN)
+                    accounttype = 'MHOUS' 
+                f.write(position.strip()[:4]+"Sum".ljust(20," ")+accounttype+position.strip()[29:]+"\n")    # add account named "Sum" and force its type to Net
                 
         for bpins in sum_bpins_list:
             f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")    # add position for sum account
@@ -831,8 +854,8 @@ def write_newposition_rc(position_list,sum_bpins_list,sum_position_file):
                     # REPLACE WITH MHOUS FOR RC (otherwise there will be a duplicate in for bp in PC-SPAN)
                     accounttype = 'MHOUS' 
                 # Use string from orig pos file to write BPID and Account number as well as Sum Account lines.
-                f.write(position.strip()[:24]+accounttype+position.strip()[29:]+"\n")
-                f.write(position.strip()[:4]+"Sum".ljust(20," ")+accounttype+position.strip()[29:]+"\n")
+                f.write(position.strip()[:24]+accounttype+position.strip()[29:]+"\n")   # update account type (from string 24-29) to MHOUS
+                f.write(position.strip()[:4]+"Sum".ljust(20," ")+accounttype+position.strip()[29:]+"\n")    # add account named "Sum"
             else:
                 f.write(position)
         for bpins in sum_bpins_list:
