@@ -1,6 +1,6 @@
 # # Breakdown and recreate Risk Capital calculation script
 
-from __future__ import division     # import division so that / is mapped to __truediv__() and return more decimals figure
+from __future__ import division     # import division so that '/' is mapped to __truediv__() and return more decimals figure
 import logging  # import logging to log any error
 import os   # import os module to change working directory
 import glob     # import glob module to file list of filename that match certain criteria
