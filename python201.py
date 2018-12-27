@@ -66,6 +66,7 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
     # Modified files
     new_pa2 = parent_dir + r"\\out\\" + out_timestamp + r"new.pa2"
     sum_position_txt =  parent_dir + r"\\out\\" + out_timestamp + r"sum.txt"
+    sum_position_rc_txt =  parent_dir + r"\\out\\" + out_timestamp + r"sum_rc.txt"
     
     # Newly created files
     whatif_xml =  parent_dir + r"\\out\\" + out_timestamp + r"whatif.xml"
@@ -77,7 +78,7 @@ def find_current_files(yyyymmdd,hhmmss):    # variable = date and current execut
     pbreq_csv =  parent_dir + r"\\out\\" + out_timestamp + r"pbreq_" 
     final_csv = parent_dir + r"\\out\\" + out_timestamp + r"final.csv"
 
-    return (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv)
+    return (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt,sum_position_rc_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv)
 
 #2. read pa2 & store data into various lists
 ### 2.1. read 
@@ -808,6 +809,7 @@ def parse_position(position_list):
     return sum_bpins_list, option_position_list, sum_bpacc_list
 
 #8. write new position file with additional information for sum account
+# copy every row in current position file to new position file, except for some conditions
 def write_newposition(position_list,sum_bpins_list,sum_position_txt):
     with open(sum_position_txt, "w") as f:  # open sum position file as f in write mode
         for position in position_list:  # loop through position list, (from original position file)
@@ -840,10 +842,10 @@ def write_newposition_rc(position_list,sum_bpins_list,sum_position_file):
 ### 9.1. write instruction in txt file, for margin calculation purpose. Remove identifier variable as this script only use for margin calculation
 def margin_SPAN_instruction(pa2_pa2,position_txt,span_spn,spanit_txt):
     with open(spanit_txt + "margin.txt", "w") as f:  # open SPAN instruction txt file in write mode
-        f.write ("Load" + pa2_pa2 + "\n")   # load original pa2
-        f.write ("Load" + position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
+        f.write ("Load " + pa2_pa2 + "\n")   # load original pa2
+        f.write ("Load " + position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
         f.write ("Calc" + "\n") # calculate
-        f.write ("Save " + span_spn + "margin.spn" + "\n") # save as spn file
+        f.write ("Save " + span_spn + "margin.spn" + "\n") # save as spn file 
     return spanit_txt
 
 ### 9.2. write instruction in txt file, for risk capital calculation purpose. 
@@ -1193,8 +1195,8 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
         # add column rc converted to bp unique list
         bp['rcconv'] = max(shortrc, longrc)
     
-    print ("bp unique list")
-    for l in bp_unique_list: print (l)
+    # print ("bp unique list")
+    # for l in bp_unique_list: print (l)
     
     # For final rc figure, use higher of rcconv in bp_unique_list vs Sum(rcconv) in sum_bpacc_list
     for bp in bp_unique_list:   # loop through unique list of bp
@@ -1230,8 +1232,8 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
             bpacc['bpid'] = bpacc['bpacc']
             logging.error(bpacc['bpacc'][:3] + " BPID is not in cons_house.csv")
     
-    print ("bp accounts with sum a/c final rc")
-    for l in sum_bpacc_list: print (l)
+    # print ("bp accounts with sum a/c final rc")
+    # for l in sum_bpacc_list: print (l)
 
     return pbreq_list, sum_bpacc_list
 
@@ -1242,8 +1244,8 @@ def write_rc(sum_bpacc_list,final_csv):
             "Intermediate RC,Delta adjusted net exposure (NZD),Stress Losses (NZD),"
             "Margin (NZD),Intermediate RC (NZD)\n")
 
-        print ("bp accounts with sum a/c final rc")
-        for l in sum_bpacc_list: print (l)
+        # print ("bp accounts with sum a/c final rc")
+        # for l in sum_bpacc_list: print (l)
         
         for bpacc in sum_bpacc_list:
             try:
@@ -1273,7 +1275,7 @@ def main():
 
     for date in dates:  # loop for all date in dates list
         #1. Collect input files (cons, input). Define newly created file and path. 
-        (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
+        (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt,sum_position_rc_txt, whatif_xml, spanit_txt, span_spn, pbreq_csv, final_csv) = find_current_files(date.strftime("%Y%m%d"), hhmmss)
         
         #2. read pa2 file & store data into various lists
         pa2_list = read_pa2(pa2_pa2)    # read from file then transfer to pa2 list
@@ -1308,7 +1310,7 @@ def main():
 
         #8. write position file with sum positions
         write_newposition(position_list,sum_bpins_list,sum_position_txt)
-        write_newposition_rc(position_list,sum_bpins_list,sum_position_txt)
+        write_newposition_rc(position_list,sum_bpins_list,sum_position_rc_txt)
         
         #9. calculate and get report for:
         #9.1. margin
@@ -1318,7 +1320,7 @@ def main():
         call_SPAN_report(span_spn, pbreq_csv,"margin")
 
         #9.2. risk capital
-        rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
+        rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_spn,spanit_txt)    # write txt instruction for SPAN calculation: risk capital
         call_SPAN(spanit_txt, "rc")
         call_SPAN_report(span_spn, pbreq_csv,"rc")
         
@@ -1336,11 +1338,11 @@ def main():
         
         #14. write final excel file
         write_rc(sum_bpacc_list,final_csv)
+        print ("\n complete")
 
 # if this python is run directly, run main(); else do not run main()
 # before running anything, Python interpreter will define a few variables such as __name__. And if the script is run directly, variable __name__ will take value __main__
 if __name__ == "__main__":
-    print ("run directly")
     main()
 else:
     print ("not run directly")
