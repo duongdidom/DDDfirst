@@ -827,7 +827,7 @@ def parse_position(position_list):
     return sum_bpins_list, option_position_list, sum_bpacc_list
 
 #8. write new position file with additional information for sum account
-# copy every row in current position file to new position file, except for some conditions
+#8.1. copy every row in current position file to new position file, except for some conditions
 def write_newposition(position_list,sum_bpins_list,sum_position_txt):
     with open(sum_position_txt, "w") as f:  # open sum position file as f in write mode
         for position in position_list:  # loop through position list, (from original position file)
@@ -843,7 +843,7 @@ def write_newposition(position_list,sum_bpins_list,sum_position_txt):
         for bpins in sum_bpins_list:
             f.write("5"+bpins['bpins'][:3]+"Sum".ljust(20," ")+bpins['bpins'][3:]+("-" if bpins['position'] < 0 else "0")+str(abs(bpins['position'])).rjust(7,"0")+"\n")    # add position for sum account
 
-#8.b Write new function to force ALL accounts in position txt file to be M instead of O. So that SPAN calculated stress loss on Net Position basis.
+#8.2. Write new function to force ALL accounts in position txt file to be M instead of O. So that SPAN calculated stress loss on Net Position basis.
 def write_newposition_rc(position_list,sum_bpins_list,sum_position_file):
     with open(sum_position_file, "w") as f:
         for position in position_list:
@@ -1332,7 +1332,9 @@ def main():
         sum_bpins_list, option_position_list, sum_bpacc_list = parse_position(position_list)    # break down into several other lists
 
         #8. write position file with sum positions
-        write_newposition(position_list,sum_bpins_list,sum_position_txt)
+        # 8.1.
+        write_newposition(position_list,sum_bpins_list,sum_position_txt) 
+        # 8.2.
         write_newposition_rc(position_list,sum_bpins_list,sum_position_rc_txt)
         
         #9. calculate and get report for:
