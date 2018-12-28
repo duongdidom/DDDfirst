@@ -6,13 +6,15 @@ run those combination of files for 21% risk capital calculation
 import os
 import glob
 import datetime
+from shutil import copy2
 
 """ input """
-parent_dir = r"C:\SPANfiles\201812"
+parent_dir = r"C:\SPANfiles\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out\
 cutoff_time = "22:30:00"
+temp_dir =  r"C:\SPANfiles\temp"    # where files in execution list is copied into
 """"""""""""
 cutoff_time = datetime.datetime.strptime(cutoff_time,"%H:%M:%S") # convert cut off time from hh:mm:ss to yyyy-mm-dd hh:mm:ss
-LOG = []    # create a empty list for logging
+LOG = []    # create an empty list for logging
 LOG.append("start time: " + str(datetime.datetime.now()))   # insert start time to log list
 
 # 1. find a bunch of pa2 files that their modified time is after predefined cut off time
@@ -28,17 +30,17 @@ def Get_Timestamp():
         sameday_cutoff = mtime.replace(hour=cutoff_time.time().hour, minute=cutoff_time.time().minute, second=cutoff_time.time().minute, microsecond=0)   # from cut off time, find cut off time of the same day of the modified date & time
 
         if mtime > sameday_cutoff:  # check if modified time of pa2 file is after cut off time
-            timestamp = pa2[(len(parent_dir)+1):35]     # extract time stamp from file name
+            timestamp = pa2[(len(parent_dir)+1):35]     # extract time stamp from file name. From end of parent directory to character 35th
             timestamp_list.append(timestamp)            # append time stamp to timestamp list
 
     return timestamp_list
 
 # 2. find equivalent original position and rc_cons files at each time stamp
-def Get_files(timestamp_list):
+def Get_Files(timestamp_list):
     execution_list =[]
     # define an empty execution list. Will be the result of the function
-    # in order to store for each timestamp: pa2, position, & 3 rc cons files
-    execution_list.append(["date_time","pa2","position","rc_cons_Scan","rc_cons_Interm","rc_cons_Intercomm","rc_cons_House"])   # header for execution list
+    # purpose: store for each timestamp: pa2, position, & 3 rc cons files
+    # header for execution list: ["date_time","pa2","position","rc_cons_Scan","rc_cons_Interm","rc_cons_Intercomm","rc_cons_House"]
 
     for timestamp in timestamp_list:    # loop through list
         # grab position and rc Cons files
@@ -54,39 +56,48 @@ def Get_files(timestamp_list):
             LOG.append("Position file for " + timestamp + " not found")
             posfile = "N/a"
         else:
-            posfile = posfile[0]
+            posfile = posfile[0][(len(parent_dir)+1):]
         if len(rcCons_scan) < 1:
             LOG.append("RC cons Scan file for " + timestamp + " not found")
             rcCons_scan = "N/a"
         else:
-            rcCons_scan = rcCons_scan[0]
+            rcCons_scan = rcCons_scan[0][(len(parent_dir)+1):]
         if len(rcCons_intermonth) < 1:
             LOG.append("RC cons Intermonth file for " + timestamp + " not found")
             rcCons_intermonth = "N/a"
         else:
-            rcCons_intermonth = rcCons_intermonth[0]
+            rcCons_intermonth = rcCons_intermonth[0][(len(parent_dir)+1):]
         if len(rcCons_intercomm) < 1:
             LOG.append("RC cons Intercomm file for " + timestamp + " not found")
             rcCons_intercomm = "N/a"
         else:
-            rcCons_intercomm = rcCons_intercomm[0]
+            rcCons_intercomm = rcCons_intercomm[0][(len(parent_dir)+1):]
         if len(rcCons_house) < 1:
             LOG.append("RC cons House file for " + timestamp + " not found")
             rcCons_house = "N/a"
         else:
-            rcCons_house = rcCons_house[0]
+            rcCons_house = rcCons_house[0][(len(parent_dir)+1):]
 
         # find pa2 filename again
         pa2 = glob.glob(parent_dir + "\\" + timestamp + "*NZX*" + "*.s.pa2")
-        pa2 = pa2[0]
+        pa2 = pa2[0][(len(parent_dir)+1):]
 
         # append to execution list
         execution_list.append([timestamp,pa2, posfile,rcCons_scan, rcCons_intermonth,rcCons_intercomm, rcCons_house])
 
     return execution_list
 
+# 3. copying files in execution list to temp folder
+def Copy_2_temp(execution_list):
+    for eachdate in execution_list:
+        for eachfile in eachdate[1:]:   # skip the 1st item (date)
+            copy2(parent_dir + "\\" + eachfile, temp_dir)
+
 ### MAIN ###
 timestamp_list = Get_Timestamp()
-Get_files(timestamp_list)
+execution_list = Get_Files(timestamp_list)
+Copy_2_temp(execution_list)
 LOG.append("finish time: " + str(datetime.datetime.now()))   # insert finish time to log list
 for log in LOG: print (log)
+
+
