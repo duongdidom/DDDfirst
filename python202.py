@@ -7,6 +7,7 @@ import os
 import glob
 import datetime
 from shutil import copy2
+from python203 import Calculate_21_rc
 
 """ input """
 parent_dir = r"C:\SPANfiles\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out\
@@ -90,13 +91,24 @@ def Get_Files(timestamp_list):
 # 3. copying files in execution list to temp folder
 def Copy_2_temp(execution_list):
     for eachdate in execution_list:
-        for eachfile in eachdate[1:]:   # skip the 1st item (date)
+        for eachfile in eachdate[1:]: # skip the 1st item (date)
             copy2(parent_dir + "\\" + eachfile, temp_dir)
 
 ### MAIN ###
 timestamp_list = Get_Timestamp()
 execution_list = Get_Files(timestamp_list)
 Copy_2_temp(execution_list)
+
+for eachdate in execution_list:
+    # input_dir = temp_dir + "\\" + eachdate[0]
+    Calculate_21_rc (temp_dir + "\\" , 
+        eachdate[0],    # output timestamp
+        eachdate[1],    # pa2 
+        eachdate[2],    # position 
+        eachdate[3],    # rc scan
+        eachdate[4],    # rc intermonth
+        eachdate[5],    # rc intercomm
+        eachdate[6])    # house
 LOG.append("finish time: " + str(datetime.datetime.now()))   # insert finish time to log list
 for log in LOG: print (log)
 
