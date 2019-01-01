@@ -66,6 +66,7 @@ def parse_pa2(original_pa2):
     for line in original_pa2:
         # a. price list = list of prices [commodity, type, maturity, price]
         # eg ['WMP','FUT',201801,31200]
+        # Having 2 seperate price list and instrument list because price list doesn't have option instrument. Once calculate price of underlying FUT of options, the script will update rc scan range of underlying instrument of that option in Instrument list
         if line.startswith("82") and (line[25:28] == "FUT" or line[25:28] == "PHY"):
             price_list.append({     # insert into list dictionary style data
                 'comm':str(line[5:15]).strip(),    # strip() remove any space character
@@ -270,12 +271,29 @@ def read_rcparams (rc_scan_csv,rc_intermonth_csv, rc_intercomm_csv):
     
     return (rc_scan_list, rc_intermonth_list, rc_intercomm_list)
 
+# 4. calculate new scan range, new intermonth, new intercomm, based on 3 rc cons files. Then re write intermonth list and intercomm list 
+"""
+anything misspecified or missing is ignored, default for scan stretch is 
+0.25, intermonth and intercomm default to what is in original margin pa2
+"""
+### 4.1. calcuate new scan range
+def calc_newscan(price_list, instrument_list, rc_scan_list):
+    for price in price_list:
+        for rc_scan in rc_scan_list:
+            
+
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
+    #1. Collect input files (cons, input). Define newly created file and path.
     (pa2_pa2, position_txt, rc_intercomm_csv,rc_intermonth_csv, rc_scan_csv, house_csv, new_pa2, sum_position_txt,sum_position_rc_txt, whatif_xml, spanInstr_margin_txt, spanInstr_rc_txt, span_margin_spn, span_rc_spn, pbreq_margin_csv, pbreq_rc_csv, final_csv) = input_files(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv)
 
+    #2. read pa2 file & store data into various lists
     (original_pa2) = read_pa2(pa2_pa2)
 
     (price_list, intermonth_list, intermonth_param_list, intercomm_list, instrument_list, option_list, deltascale_list, price_param_list, currency_list) = parse_pa2(original_pa2)
 
+    #3. read 3 constant files. Read from file to list
     (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams (rc_scan_csv,rc_intermonth_csv, rc_intercomm_csv)
+
+    #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
+    price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
