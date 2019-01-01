@@ -3,10 +3,10 @@ re-create Risk Capital calculation script again for 21% stretch
 """
 from __future__ import division     # import division so that '/' is mapped to __truediv__() and return more decimals figure
 import logging  # import logging to log any error
-import os   # import os module to change working directory
-import glob     # import glob module to file list of filename that match certain criteria
+# import os   # import os module to change working directory
+# import glob     # import glob module to file list of filename that match certain criteria
 from datetime import datetime, date, timedelta   # import datetime module to convert string to date format
-import shutil   # import shutil module to copy file
+# import shutil   # import shutil module to copy file
 import csv      # import csv to read csv file
 import copy     # import copy to copy from (sum bp account w/o currency) to (sum bp account with currency)
 import subprocess   # import subprocess module to call another application
@@ -222,7 +222,53 @@ def parse_pa2(original_pa2):
     return (price_list, intermonth_list, intermonth_param_list, intercomm_list,
         instrument_list, option_list, deltascale_list, price_param_list, currency_list)
 
-# 3. read 3 constant files:
+# 3. read 3 constant files
+def read_rcparams (rc_scan_csv,rc_intermonth_csv, rc_intercomm_csv):
+    ### 3.1. create empty list
+    rc_scan_list = []
+    rc_intermonth_list = []
+    rc_intercomm_list = []
+
+    ### 3.2. read rc scan. Parse data to rc scan list
+    # commodity, maturity, stretch percentage 
+    # eg ['MKP',201809,0.02]
+    with open (rc_scan_csv, "r") as temp:        
+        csv_reader = list(csv.reader(temp))
+        for row in csv_reader: 
+            rc_scan_list.append({
+                'comm':str(row[0]),
+                'maturity':int(row[1]),
+                'rate':float(row[2])
+            })
+
+    ### 3.3. read rc intermonth. Parse data to rc intermonth list
+    # commodity, tier a, tier b, spread%
+    # eg ['WMP',1,2,0.3]
+    with open (rc_intermonth_csv, "r") as temp:
+        csv_reader = list(csv.reader(temp))
+        for row in csv_reader:
+            rc_intercomm_list.append({
+                'comm':str(row[0]),
+                'tiera':int(row[1]),
+                'tierb':int(row[2]),
+                'rate':float(row[3])
+            })
+
+    ### 3.4. read rc intercomm. Parse data to rc intercomm list
+    # commodity a, delta a, commodity b, delta b, spread% 
+    # eg ['WMP',20,'SMP',29,0.4]
+    with open (rc_intercomm_csv, "r") as temp:
+        csv_reader = list(csv.reader(temp))
+        for row in csv_reader:
+            rc_intercomm_list.append({
+                'comma':str(row[0]),
+                'deltaa':int(row[1]),
+                'commb':str(row[2]),
+                'deltab':int(row[3]),
+                'rate':float(row[4])
+            })
+    
+    return (rc_scan_list, rc_intermonth_list, rc_intercomm_list)
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -231,3 +277,5 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     (original_pa2) = read_pa2(pa2_pa2)
 
     (price_list, intermonth_list, intermonth_param_list, intercomm_list, instrument_list, option_list, deltascale_list, price_param_list, currency_list) = parse_pa2(original_pa2)
+
+    (rc_scan_list, rc_intermonth_list, rc_intercomm_list) = read_rcparams (rc_scan_csv,rc_intermonth_csv, rc_intercomm_csv)
