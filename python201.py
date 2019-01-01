@@ -12,11 +12,11 @@ import subprocess   # import subprocess module to call another application
 
 # define start date and end date
 # convert start date and end date to date format. strptime = string parse time = retrieve time string
-startD = datetime.strptime("16/11/2018", "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
-endD = datetime.strptime("17/11/2018", "%d/%m/%Y")      # output would be in date format, not string format
+startD = datetime.strptime("03/12/2018", "%d/%m/%Y")    # 2nd parameter after comma = how original date was formatted
+endD = datetime.strptime("04/12/2018", "%d/%m/%Y")      # output would be in date format, not string format
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
-parent_dir = r"C:\Users\douglas.cao\Documents\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
+parent_dir = r"C:\Users\DDD\Downloads\Test"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
 
 # create a log file
 LOGFILE = parent_dir + r"\out\log.log"

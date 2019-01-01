@@ -277,10 +277,41 @@ anything misspecified or missing is ignored, default for scan stretch is
 0.25, intermonth and intercomm default to what is in original margin pa2
 """
 ### 4.1. calcuate new scan range
+# a. append new column to price list
 def calc_newscan(price_list, instrument_list, rc_scan_list):
     for price in price_list:
+        bUpdate = False # boolean if instrument was specified in rc_scan_csv
         for rc_scan in rc_scan_list:
-            
+            if price['comm'] == rc_scan['comm'] and price['maturity'] == rc_scan['maturity']:
+                price.update({
+                    'rc_scan_rate':rc_scan['rate']
+                })
+                bUpdate = True
+        if not bUpdate:
+            price['rc_scan_rate'] = float(0.25) # specify 21% if instrument is not specified in rc_scan parameter
+
+# b. calculate regular price (after consider contract size). Calculate stretch price (after consider contract size and max movement)
+    for instru in instrument_list:
+        bUpdate = False # boolean variable if price has been calculated and updated?
+        for price in price_list:
+            if instru['instype'] != 'OOP':   # NOT option on physical
+                if instru['comm'] == price['comm'] and instru['maturity'] == price['maturity']:
+                    instru.update({
+                        'dspconv':price['dsp']/(10**price['dspdl'])*instru['cvf'],  # = price of underlying / (10^decimal locator of underlying) * contract size of instrument itself
+                        'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']
+                    })
+                    bUpdate = True
+            elif instru['instype'] == 'OOP':
+                if instru['comm'] == price['comm'] and instru['maturity'] == price['maturity'] and price['instype'] == 'PHY':
+                    instru.update({
+                        'dspconv':price['dsp']/(10**price['dspdl'])*instru['cvf'],
+                        'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']
+                    })
+                    bUpdate = True
+        if not bUpdate:
+            print (instru['comm'] + " " + instru['instype'] + " not updated")
+
+    return (price_list, instrument_list)
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -297,3 +328,5 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
 
     #4. calculate new stretched scan range, intermonth, intercomm. Then write new intermonth, intercomm list
     price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
+
+    instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
