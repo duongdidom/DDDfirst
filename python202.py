@@ -10,9 +10,9 @@ from shutil import copy2
 from python203 import Calculate_21_rc
 
 """ input """
-parent_dir = r"C:\SPANfiles\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out\
+parent_dir = r"C:\Users\DDD\Downloads\Test\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out
 cutoff_time = "22:30:00"
-temp_dir =  r"C:\SPANfiles\temp"    # where files in execution list is copied into
+temp_dir =  r"C:\Users\DDD\Downloads\Test\temp"    # where files in execution list is copied into
 """"""""""""
 cutoff_time = datetime.datetime.strptime(cutoff_time,"%H:%M:%S") # convert cut off time from hh:mm:ss to yyyy-mm-dd hh:mm:ss
 LOG = []    # create an empty list for logging
@@ -31,7 +31,7 @@ def Get_Timestamp():
         sameday_cutoff = mtime.replace(hour=cutoff_time.time().hour, minute=cutoff_time.time().minute, second=cutoff_time.time().minute, microsecond=0)   # from cut off time, find cut off time of the same day of the modified date & time
 
         if mtime > sameday_cutoff:  # check if modified time of pa2 file is after cut off time
-            timestamp = pa2[(len(parent_dir)+1):35]     # extract time stamp from file name. From end of parent directory to character 35th
+            timestamp = pa2[(len(parent_dir)+1):(len(parent_dir)+16)]     # extract time stamp from file name. From end of parent directory to the next 15 characters
             timestamp_list.append(timestamp)            # append time stamp to timestamp list
 
     return timestamp_list

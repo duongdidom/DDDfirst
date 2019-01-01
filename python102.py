@@ -436,3 +436,10 @@
 # import matplotlib.pyplot as plt
 # plt.plot (x,y)
 # plt.show()      # graph the function
+
+############################################################################################################################################################################
+# 17 function enumerate() generate index number for each item in a list. Could be useful for looping
+seasons = ['Spring', 'Summer', 'Fall', 'Winter']
+for l in enumerate(seasons): print (l)
+for l in enumerate(seasons): print (str(l[0]) + " = " + l[1])
+
