@@ -93,3 +93,9 @@ end_date = date(2013, 1, 10)
 for x in range(0, (end_date-start_date).days):  # loop from 0 to number of days from start date to end date. 
                                                 # range() function excludes end date
         print (start_date + timedelta(x))       # for each loop, convert x from inteter to date using timedelta. Plus that number to start date
+
+############################################################################################################################################################################
+# 17 function enumerate() generate index number for each item in a list. Could be useful for looping
+seasons = ['Spring', 'Summer', 'Fall', 'Winter']
+for l in enumerate(seasons): print (l)
+for l in enumerate(seasons): print (str(l[0]) + " = " + l[1])
