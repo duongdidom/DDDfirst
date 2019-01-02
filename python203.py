@@ -298,7 +298,7 @@ def calc_newscan(price_list, instrument_list, rc_scan_list):
                 if instru['comm'] == price['comm'] and instru['maturity'] == price['maturity']:
                     instru.update({
                         'dspconv':price['dsp']/(10**price['dspdl'])*instru['cvf'],  # = price of underlying / (10^decimal locator of underlying) * contract size of instrument itself
-                        'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']
+                        'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']   # = dsp converted * rc_scan_rate
                     })
                     bUpdate = True
             elif instru['instype'] == 'OOP':
@@ -476,7 +476,58 @@ def write_new_pa2(original_pa2,new_intermonth_list,new_intercomm_list,new_pa2):
         # write new intermonth & intercomm in new pa2 file
         temp.writelines(new_intermonth_list)
         temp.writelines(new_intercomm_list)
+
+# 6. write whatif xml file
+def write_whatif(instrument_list, whatif_xml):
+    # 6.1. define function write update scan: inserting values into what-if.xml file in format that PC SPAN can understand
+    def write_updatescan(commodity,instype,maturity,newscan):
+        return ''.join((
+            "<updateRec>\n<ec>NZX</ec>\n<cc>",
+            commodity,
+            "</cc>\n<exch>NZX</exch>\n<pfCode>",
+            commodity,
+            "</pfCode>\n<pfType>",
+            instype,
+            "</pfType>\n<sPe>",
+            str(maturity),
+            "</sPe>\n<ePe>",
+            str(maturity),
+            "</ePe>\n<updType>UPD_PRICE_RG</updType>\n<updMethod>UPD_SET</updMethod>\n<value>",
+            "{:.2f}".format(newscan),   # new scan range with convert to 2 decimal places
+            "</value>\n</updateRec>",
+            ))
+
+    # 6.2. loop through instrument_list, append to xml list all string info being output of write_updatescan() function above
+    xml_list = []
+    for instru in instrument_list:
+        xml_list.append(
+            write_updatescan(
+                instru['comm'],
+                instru['instype'],
+                instru['maturity'],
+                instru['rc_scan_range']
+                )
+        )
     
+    # 6.3. write xml list to xml file:
+    with open (whatif_xml, "w") as temp:
+        temp.write('<scenarioFile>\n')  # first: add scenario files statement
+        for row in xml_list:
+            temp.write(row)
+            temp.write('\n')
+        temp.write('\n<scenarioFile>')
+    
+# 7. read position and breakdown to bunch of lists
+### 7.1. read position text file and store in position list
+def read_position(position_txt):
+    with open (position_txt, 'r') as temp:
+        position_list = temp.readlines()
+    return position_list
+
+### 7.2. breakdown to a bunch of lists
+def parse_position(position_list):
+
+
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
     #1. Collect input files (cons, input). Define newly created file and path.
@@ -502,3 +553,11 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     #5. write risk capital pa2 file
     # new pa2 file would still have old risk array, has to be recalculated using whatif file
     write_new_pa2(original_pa2,new_intermonth_list,new_intercomm_list,new_pa2)
+
+    #6. write what if file
+    write_whatif(instrument_list, whatif_xml)
+
+    #7. read position and breakdown to bunch of lists
+    position_list = read_position(position_txt)
+
+    parse_position(position_list)
