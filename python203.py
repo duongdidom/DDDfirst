@@ -42,13 +42,13 @@ def input_files(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_cs
 
 
 # 2. read pa2 files and store data into various lists
-### 2.1. read and store each line into pa2_list
+### 2.1. read and store each line into original_pa2
 def read_pa2(pa2_pa2):
     with open (pa2_pa2, "r") as temp:   # open original pa2 in read mode
         original_pa2 = temp.readlines()    # read every lines in pa2 file, and then store in it original pa2 list
     return (original_pa2)
 
-### 2.2. loop through each row in pa2_list, base on each condition, store different information into different list
+### 2.2. loop through each row in original_pa2, base on each condition, store different information into different list
 def parse_pa2(original_pa2):
     # 2.2.1. create a bunch of empty list to store data
     price_list = []             # dsp price, except option price. Record 82
@@ -404,7 +404,7 @@ def calc_newintercomm (rc_intercomm_list, intercomm_list):  # multiply intercomm
                 intercomm.update({
                     'rc_intercomm_DeltaA':r['deltaa'],
                     'rc_intercomm_DeltaB':r['deltab'],
-                    'rc_intercomm_rate':r['rate']
+                    'rc_intercomm_rate':int(r['rate']*100)
                 })
                 bUpdate = True
         if not bUpdate: # case intercomm row is not updated
@@ -416,6 +416,67 @@ def calc_newintercomm (rc_intercomm_list, intercomm_list):  # multiply intercomm
 
     return intercomm_list
 
+### 4.4. write rc data into new pa2 file. In the original pa2 list:
+# 4.4.1: check for every row start with C, loop intermonth list to find matching commodity & tierA & tierB. Update character 15th to 21st with rc_intermonth_spread
+# 4.4.2: check for every row start with 6, loop intercomm list to find matching commA & commB. Update character 9th with rc_intercomm_rate, 16th-26th with rc_intercomm_DeltaA, 33rd-44th with rc_intercomm_DeltaB
+def write_newinters(intermonth_list, intercomm_list, original_pa2):
+    new_intermonth_list = []
+    new_intercomm_list = []
+
+    # 4.4.1
+    for pa2 in original_pa2:
+        if pa2.startswith('C'):
+            bAmended = False
+            for r in intermonth_list:
+                if pa2[2:8].strip() == r['comm'] and int(pa2[23:25].strip()) == r['tiera'] and int(pa2[30:32].strip()) == r['tierb']:  # if matches commodity, tier A & tier B
+                    if r['rc_intermonth_spread'] == 'N/A':
+                        new_intermonth_list.append(pa2)
+                        bAmended = True
+                    else:
+                        new_intermonth_list.append(
+                            pa2[:14] +
+                            str(int(r['rc_intermonth_spread'])).rjust(7,'0') +   # fill with rc intermonth spread and 0 until enough 7 characters
+                            pa2[21:]
+                        )
+                        bAmended = True
+            if not bAmended:
+                new_intermonth_list.append(pa2)
+
+    # 4.4.2
+        if pa2.startswith('6'):
+            bAmended = False
+            for r in intercomm_list:
+                if pa2[20:26].strip() == r['comma'] and pa2[38:44].strip() == r['commb']:
+                    if r['rc_intercomm_rate'] == 'N/A':
+                        new_intercomm_list.append(pa2)
+                        bAmended = True
+                    else:
+                        new_intercomm_list.append(
+                            pa2[:9] +
+                            str(r['rc_intercomm_rate']).rjust(3,'0') + '0000' +
+                            pa2[16:26] +
+                            str(r['rc_intercomm_DeltaA']).rjust(3,'0') + '0000' +
+                            pa2[33:44] +
+                            str(r['rc_intercomm_DeltaB']).rjust(3,'0') + '0000' +
+                            pa2[51:]
+                        )
+                        bAmended = True
+            if not bAmended:
+                new_intercomm_list.append(pa2)
+
+    return (new_intermonth_list, new_intercomm_list)
+
+# 5. write new pa2 for RC calculation. Copying everything from original pa2 list, except for record type C and 6. Using new intermonth list + new intercomm list (above), write every lines in those list to bottom of new pa2 file
+def write_new_pa2(original_pa2,new_intermonth_list,new_intercomm_list,new_pa2):
+    with open (new_pa2, "w") as temp:
+        for origin in original_pa2:
+            if not origin.startswith('C') and not origin.startswith('6'):
+                temp.write(origin)
+        
+        # write new intermonth & intercomm in new pa2 file
+        temp.writelines(new_intermonth_list)
+        temp.writelines(new_intercomm_list)
+    
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
     #1. Collect input files (cons, input). Define newly created file and path.
@@ -435,3 +496,9 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
 
     intercomm_list = calc_newintercomm(rc_intercomm_list, intercomm_list)   # calculate rc intercomm and insert in intercomm list
+
+    (new_intermonth_list, new_intercomm_list) = write_newinters(intermonth_list, intercomm_list, original_pa2)
+
+    #5. write risk capital pa2 file
+    # new pa2 file would still have old risk array, has to be recalculated using whatif file
+    write_new_pa2(original_pa2,new_intermonth_list,new_intercomm_list,new_pa2)
