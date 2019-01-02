@@ -394,7 +394,25 @@ def calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, 
     return (instrument_list, rc_intermonth_list, intermonth_list)
 
 ### 4.3. calculate new intercomm
-def calc_newintercomm (rc_intercomm_list,intercomm_list):  # multiply intercomm rate in intercomm cons file by 100. If not defined, take existing intercomm value
+def calc_newintercomm (rc_intercomm_list, intercomm_list):  # multiply intercomm rate in intercomm cons file by 100. If not defined, take existing intercomm value
+    # intercomm_list is now [commodity a, delta a, commodity b, delta b, spread, rc delta a, rc delta b, rc intercomm spread] 
+    # eg ['WMP',20,'SMP',29,30,20,29,40]. If there is no equivalent combo in rc intercomm csv as in original pa2 file, insert "N/A"
+    for intercomm in intercomm_list:
+        bUpdate = False
+        for r in rc_intercomm_list:
+            if intercomm['comma'] == r['comma'] and intercomm['commb'] == r['commb']:
+                intercomm.update({
+                    'rc_intercomm_DeltaA':r['deltaa'],
+                    'rc_intercomm_DeltaB':r['deltab'],
+                    'rc_intercomm_rate':r['rate']
+                })
+                bUpdate = True
+        if not bUpdate: # case intercomm row is not updated
+            intercomm.update({
+                'rc_intercomm_DeltaA':'N/A',
+                'rc_intercomm_DeltaB':'N/A',
+                'rc_intercomm_rate':'N/A'
+            })
 
     return intercomm_list
 
