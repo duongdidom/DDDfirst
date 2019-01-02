@@ -248,7 +248,7 @@ def read_rcparams (rc_scan_csv,rc_intermonth_csv, rc_intercomm_csv):
     with open (rc_intermonth_csv, "r") as temp:
         csv_reader = list(csv.reader(temp))
         for row in csv_reader:
-            rc_intercomm_list.append({
+            rc_intermonth_list.append({
                 'comm':str(row[0]),
                 'tiera':int(row[1]),
                 'tierb':int(row[2]),
@@ -313,6 +313,91 @@ def calc_newscan(price_list, instrument_list, rc_scan_list):
 
     return (price_list, instrument_list)
 
+### 4.2. calcuclate new intermonth
+def calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list):
+    # 4.2.1. break down intermonth parameter into tier list
+    tier_list = []
+    for r in intermonth_param_list:
+        if r['tier1'] != 0:
+            tier_list.append({
+                'comm':r['comm'],
+                'tier':1
+            })
+        if r['tier2'] != 0:
+            tier_list.append({
+                'comm':r['comm'],
+                'tier':2
+            })
+        if r['tier3'] != 0:
+            tier_list.append({
+                'comm':r['comm'],
+                'tier':3
+            })
+        if r['tier4'] != 0:
+            tier_list.append({
+                'comm':r['comm'],
+                'tier':4
+            })
+        
+    # 4.2.2. In instrument list, assign which tier the instrument belongs to
+    for instru in instrument_list:
+        for r in intermonth_param_list:
+            if instru['comm'] == r['comm'] and r['tier1start'] <= instru['maturity'] <= r['tier1end']:
+                instru.update({'tier':1})
+            elif instru['comm'] == r['comm'] and r['tier2start'] <= instru['maturity'] <= r['tier2end']:
+                instru.update({'tier':2})
+            elif instru['comm'] == r['comm'] and r['tier3start'] <= instru['maturity'] <= r['tier3end']:
+                instru.update({'tier':3})
+            elif instru['comm'] == r['comm'] and r['tier4start'] <= instru['maturity'] <= r['tier4end']:
+                instru.update({'tier':4})
+    
+    # 4.2.3. in Tier list, list all normal & rc_scan prices in the tier. Count how many instrument there are in the tier, in order to calculate average later on
+    for tier in tier_list:
+        pricesum = 0
+        scansum = 0
+        denominator = 0
+        for instru in instrument_list:
+            if tier['comm'] == instru['comm'] and instru['instype'] == 'FUT' and tier['tier'] == instru['tier']:     # matching for FUTURE only
+                pricesum += instru['dspconv']
+                scansum += instru['rc_scan_range']
+                denominator += 1
+
+        # complete loop all instruments. Update tier list
+        tier.update({
+            'pricesum': pricesum,
+            'scansum': scansum,
+            'denominator':denominator
+        })
+        
+    # 4.2.4. loop rc_intermonth_list. For each row, calculate average pricesum tierA & average pricesum tierB. Then taking total of those 2 averages.
+    # For each row, loop through tier_list to find pricesum of each commodity tier.
+    for r in rc_intermonth_list:
+        avgPriceA = 0
+        avgPriceB = 0
+        for tier in tier_list:
+            if r['comm'] == tier['comm'] and r['tiera'] == tier['tier'] and tier['denominator'] != 0:
+                avgPriceA = tier['pricesum']/tier['denominator']
+            if r['comm'] == tier['comm'] and r['tierb'] == tier['tier'] and tier['denominator'] != 0:
+                avgPriceB = tier['pricesum']/tier['denominator']
+        r['tierprice'] = avgPriceA + avgPriceB
+    
+    # 4.2.5. update new rc_spread into intermonth list. New rc_intermonth_spread = (rate in rc_intermonth_list) * (tier price in rc_intermonth_list)
+    for intermonth in intermonth_list:
+        bUpdate = False
+        for r in rc_intermonth_list:
+            if intermonth['comm'] == r['comm'] and intermonth['tiera'] == r['tiera'] and intermonth['tierb'] == r['tierb']:
+                intermonth['rc_intermonth_spread'] = r['rate'] * r['tierprice']
+                bUpdate = True
+        if not bUpdate: # if row in not updated
+            intermonth['rc_intermonth_spread'] = 'N/A'
+
+    return (instrument_list, rc_intermonth_list, intermonth_list)
+
+### 4.3. calculate new intercomm
+def calc_newintercomm (rc_intercomm_list,intercomm_list):  # multiply intercomm rate in intercomm cons file by 100. If not defined, take existing intercomm value
+
+    return intercomm_list
+
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
     #1. Collect input files (cons, input). Define newly created file and path.
@@ -330,3 +415,5 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     price_list, instrument_list = calc_newscan(price_list, instrument_list,rc_scan_list)    # calculate new scan range, update them into price list and instrument list
 
     instrument_list, rc_intermonth_list, intermonth_list = calc_newintermonth(instrument_list, intermonth_param_list, intermonth_list, rc_intermonth_list)   # calculate rc spread charge per intermonth tier 
+
+    intercomm_list = calc_newintercomm(rc_intercomm_list, intercomm_list)   # calculate rc intercomm and insert in intercomm list
