@@ -526,7 +526,100 @@ def read_position(position_txt):
 
 ### 7.2. breakdown to a bunch of lists
 def parse_position(position_list):
+    # 7.2.1. create new empty list
+    record5_list = []   # everything in record 5
+    bpins_list = []     # every instruments per bp
+    option_position_list = []   # every option position per bp, per acc. This is for delta adj
+    bp_acc_list = []    # every acc name per bp, additional Sum account for each bp
+    sum_bpacc_list = [] # list of all accounts per bp, with currency
+    omni_acc_list = []  # list of omnibus/client account. Since we want to exclude client position from sum position account
 
+    # 7.2.2. loop through record 2 add any omnibus client account to omni acc list
+    for r in position_list:
+        if r.startswith('2') and r[24:29] == 'OCUST':
+            omni_acc_list.append(
+                r[1:24].strip() # e.g. FCSMargin2
+            )
+
+    # 7.2.3. loop through record 5, fill up data for record5, bpins, bpacc, option position lists
+    for r in position_list:
+        if r.startswith('5'):
+        # record 5 list
+            record5_list.append({
+                'bp':r[1:4].strip(),    # e.g. FCS
+                'ins':r[27:92].strip(), # e.g. 'BTR   BTR       FUT 201904                      +00000000000000'
+                'position':int(r[92:100].strip()),
+                'isOmni':False
+                })
+            if len(record5_list) > 0 and r[1:24].strip() in omni_acc_list:
+                record5_list[-1]['isOmni'] = True   # if account is omnibus, update its boolean variable to true            
+        
+        # bp instrument list
+            bpins_list.append({
+                'bp':r[1:4].strip(),
+                'ins':r[27:92].strip()
+                })
+            
+        # bp account list
+            bp_acc_list.append({'bpacc':r[1:24].strip()})    # e.g. FCSMargin2
+            bp_acc_list.append({'bpacc':str(r[1:4]+'Sum')})  # e.g. FCSSum
+
+        # option position list
+            if r[45:48] == 'OOF' or r[45:48] == 'OOP':  # case option of future or option on physical
+                option_position_list.append({
+                    'bp':r[1:4],
+                    'acc':r[4:24].strip(),
+                    'comm':r[35:45].strip(),
+                    'instype':r[45:48],
+                    'callput':r[48:49],
+                    'maturity':int(r[49:57].strip()),
+                    'strikecnv':float(r[78:92].strip())/10000000,
+                    'position':int(r[92:100].strip())   # include +/- position
+                })
+
+    # 7.2.4. remove duplicate in bpins and bpacc lists. To create sum bpins and sum bpacc lists
+    # this is preparation step for creating sum accounts
+    sum_bpins_list = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bpins_list)]
+    print (str(len(bpins_list)) + " v.s. " + str(len(sum_bpins_list)))
+    
+    temp_list = [dict(tupleized) for tupleized in set(tuple(item.items()) for item in bp_acc_list)]  # sum bp account, no currency
+    print (str(len(bpins_list)) + " v.s. " + str(len(temp_list)))
+    
+    # 7.2.5. for each account in sum account lists, duplicate the account and add currency NZD & USD for each
+    for r in temp_list:
+        r['curr'] = "USD"   # add usd currency for dictionary
+        sum_bpacc_list.append(copy.deepcopy(r))
+        r['curr'] = "NZD"   # add nzd currency for dictionary
+        sum_bpacc_list.append(copy.deepcopy(r))   
+
+    # 7.2.6. for each account, for each instrument, create position to sum account. 
+    for sumR in sum_bpins_list:
+        # a. First set the position value to 0
+        sumR['position'] = 0
+
+        # b. loop through record 5, find matching bp and instrument, totalling position together
+        for rec5 in record5_list:
+            if sumR['bp'] == rec5['bp'] and sumR['ins'] == rec5['ins'] and rec5['isOmni'] != True: 
+                sumR['position'] += rec5['position']
+    
+        # c. if the ins record is option, append this record to option_position list as well
+        if sumR['ins'][16:19] == 'OOF' or sumR['ins'][16:19] == 'OOP':
+            option_position_list.append({
+                'bp':sumR['bp'],
+                'acc':'Sum',
+                'comm':sumR['ins'][0:4].strip(),
+                'instype':sumR['ins'][16:19],
+                'callput':sumR['ins'][19:20],
+                'maturity':int(sumR['ins'][20:29].strip()),
+                'strikeconv':float(sumR['ins'][48:62].strip())/10000000,
+                'position':sumR['position']
+            })
+
+    print ("sum bp instrument with position")
+    for l in sum_bpins_list: print (l)
+    print ("option position list, sum account")
+    for l in option_position_list: print (l)
+    return sum_bpins_list, option_position_list, sum_bpacc_list
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -557,7 +650,7 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     #6. write what if file
     write_whatif(instrument_list, whatif_xml)
 
-    #7. read position and breakdown to bunch of lists
+    #7. read position and breakdown to bunch of lists in order to create sum position list
     position_list = read_position(position_txt)
 
-    parse_position(position_list)
+    (sum_bpins_list, option_position_list, sum_bpacc_list) = parse_position(position_list)

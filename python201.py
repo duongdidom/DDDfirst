@@ -16,7 +16,7 @@ startD = datetime.strptime("03/12/2018", "%d/%m/%Y")    # 2nd parameter after co
 endD = datetime.strptime("04/12/2018", "%d/%m/%Y")      # output would be in date format, not string format
 
 # define parent directory where input, cons, output folders are stored. This assumes all three folders are under a parent folder, mainly for testing purpose. Might need to modify in real situation
-parent_dir = r"C:\Users\DDD\Downloads\Test"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
+parent_dir = r"C:\Users\douglas.cao\Documents\Python\RiskCapital"    # insert r before a string so that python interprete string as raw. C:\Users\DDD\Downloads\Test for home
 
 # create a log file
 LOGFILE = parent_dir + r"\out\log.log"
@@ -819,10 +819,10 @@ def parse_position(position_list):
             'position':bpins['position']    # position per instrument
             })
 
-    # print ("sum bp instrument with position")
-    # for l in sum_bpins_list: print (l)
-    # print ("option position list, sum account")
-    # for l in option_position_list: print (l)
+    print ("sum bp instrument with position")
+    for l in sum_bpins_list: print (l)
+    print ("option position list, sum account")
+    for l in option_position_list: print (l)
 
     return sum_bpins_list, option_position_list, sum_bpacc_list
 
