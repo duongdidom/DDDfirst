@@ -3,7 +3,7 @@ re-create Risk Capital calculation script again for 21% stretch
 """
 from __future__ import division     # import division so that '/' is mapped to __truediv__() and return more decimals figure
 import logging  # import logging to log any error
-# import os   # import os module to change working directory
+import os   # import os module to change working directory
 # import glob     # import glob module to file list of filename that match certain criteria
 from datetime import datetime, date, timedelta   # import datetime module to convert string to date format
 # import shutil   # import shutil module to copy file
@@ -700,25 +700,47 @@ def write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt):
 
 # 9. write instruction to tell SPAN calculating margin, then save report.  
 ### 9.1. write instruction in txt file, for margin calculation purpose. Remove identifier variable as this script only use for margin calculation
-def margin_SPAN_instruction(pa2_pa2,position_txt,span_spn,spanit_txt):
-    with open(spanit_txt + "margin.txt", "w") as f:  # open SPAN instruction txt file in write mode
+def margin_SPAN_instruction(pa2_pa2,sum_position_txt, spn ,spanit_txt):
+    with open(spanit_txt, "w") as f:  # open SPAN instruction txt file in write mode
         f.write ("Load " + pa2_pa2 + "\n")   # load original pa2
-        f.write ("Load " + position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
+        f.write ("Load " + sum_position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
         f.write ("Calc" + "\n") # calculate
-        f.write ("Save " + span_spn + "margin.spn" + "\n") # save as spn file 
+        f.write ("Save " + spn + "\n") # save as spn file 
     return spanit_txt
 
 ### 9.2. write instruction in txt file, for risk capital calculation purpose. 
-def rc_SPAN_instruction(new_pa2,whatif_xml,position_txt,span_spn,spanit_txt):
-    with open(spanit_txt + "rc.txt", "w") as f:
+def rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt, spn, spanit_txt):
+    with open(spanit_txt, "w") as f:
         f.write("Load " + new_pa2 + "\n")
-        f.write("Load " + position_txt + "\n") 
+        f.write("Load " + sum_position_rc_txt + "\n") 
         f.write("SelectPointInTime" + "\n")
         f.write("ApplyWhatIf " + whatif_xml + "\n")
         f.write("CalcRiskArray" + "\n")
         f.write("Calc" + "\n")
-        f.write("Save " + span_spn + "rc.spn\n")    
+        f.write("Save " + spn + "\n")    
     return spanit_txt
+
+### 9.3. run SPAN, given instruction text file
+def call_SPAN(spanit_txt):
+    os.chdir (r"C:\span4\bin")  # os.chdir = change current working directory
+    subprocess.call(["spanitrm.exe",spanit_txt])
+
+### 9.4. generate SPAN report
+# open spn file and generate pbreq.csv file
+# the input spn file must have already have pa2 and position files combined
+# mshta must be given an absolute pathname, not a relative one
+# this process does not work with filenames containing spaces " "
+def call_SPAN_report(spn,pbreq_csv):
+    os.chdir(r"C:\span4\Reports")
+    subprocess.call(["mshta.exe", r"C:\span4\rptmodule\spanReport.hta", spn])
+
+    # Convert spanReport.hta output (Link AP\C:\span4\Reports\PB Req Delim.txt) to (parent directory + \YYYYMMDD-hhmmss_pbreq_identifier.csv)
+    pbreq_txt = r"C:\Span4\Reports\PB Req Delim.txt"
+    pbreq_reader = csv.reader( open(pbreq_txt,"r"), delimiter = ',')
+    with open(pbreq_csv , "w") as output:
+        output_csv = csv.writer(output)
+        output_csv.writerows(pbreq_reader)
+
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -758,3 +780,16 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     write_sum_position_txt(position_list,sum_bpins_list,sum_position_txt)
 
     write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt)
+
+    #9. calculate and get report for:
+    ### margin
+    margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_margin_spn,spanInstr_margin_txt) # write txt instruction for SPAN calculation: margin
+    call_SPAN(spanInstr_margin_txt)
+    call_SPAN_report(span_margin_spn, pbreq_margin_csv)
+    
+    ### risk capital
+    rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_rc_spn,spanInstr_rc_txt)    # write txt instruction for SPAN calculation: risk capital
+    call_SPAN(spanInstr_rc_txt)
+    call_SPAN_report(span_rc_spn, pbreq_rc_csv)
+
+    #10. calculate delta adjusted net exposure for options
