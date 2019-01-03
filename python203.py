@@ -573,7 +573,7 @@ def parse_position(position_list):
                     'instype':r[45:48],
                     'callput':r[48:49],
                     'maturity':int(r[49:57].strip()),
-                    'strikecnv':float(r[78:92].strip())/10000000,
+                    'strikeconv':float(r[78:92].strip())/10000000,
                     'position':int(r[92:100].strip())   # include +/- position
                 })
 
@@ -611,15 +611,114 @@ def parse_position(position_list):
                 'instype':sumR['ins'][16:19],
                 'callput':sumR['ins'][19:20],
                 'maturity':int(sumR['ins'][20:29].strip()),
-                'strikeconv':float(sumR['ins'][48:62].strip())/10000000,
+                'strikeconv':float(sumR['ins'][49:63].strip())/10000000,
                 'position':sumR['position']
             })
 
-    print ("sum bp instrument with position")
-    for l in sum_bpins_list: print (l)
-    print ("option position list, sum account")
-    for l in option_position_list: print (l)
     return sum_bpins_list, option_position_list, sum_bpacc_list
+
+# 8. write position txt files, with sum account
+### 8.1. write position txt files for margin. Client account remains OCUST
+# but if in record 2 account type is OCUST, its Sum account will be amended to MHOUS
+def write_sum_position_txt(position_list,sum_bpins_list,sum_position_txt):
+    with open (sum_position_txt, 'w') as temp:
+        # write every original row in position file to new sum position txt
+        for origin_posi in position_list:
+            temp.write(origin_posi)    
+
+            # under every row of record 2, add Sum account underneath it. If account type is OCUST, change to MHOUS
+            if origin_posi.startswith('2') and origin_posi[24:29] == 'OCUST':
+                temp.write(
+                    origin_posi[:4] +
+                    'Sum'.ljust(20," ") +   # fill up the next 20 characters by Sum and " "
+                    'MHOUS'+                # force sum account to net
+                    origin_posi[29:]
+                )
+            elif origin_posi.startswith('2'):
+                temp.write(
+                    origin_posi[:4] +
+                    'Sum'.ljust(20," ") + # fill up the next 20 characters by Sum and " "
+                    origin_posi[24:]
+                )
+        
+        # loop through sum_bpins_list, write record type 5 for position txt
+        for sumPos in sum_bpins_list:
+            temp.write(
+                "5" + 
+                sumPos['bp'] + 
+                'Sum'.ljust(20," ") + 
+                'NZX'.ljust(5," ") +
+                sumPos['ins'] + 
+                ("-" if sumPos['position'] < 0 else "0") +
+                str(abs(sumPos['position'])).rjust(7,"0") + 
+                "\n"
+            )
+
+### 8.2. write position txt files for rc. Client account becomes MHOUS
+def write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt):
+    with open (sum_position_rc_txt, 'w') as temp:
+        # write every original row in position file to new sum position txt
+        for origin_posi in position_list:
+            # temp.write(origin_posi)    # don't write every row yet
+
+            # under every row of record 2, add Sum account underneath it. If account type is OCUST, change to MHOUS
+            if origin_posi.startswith('2') and origin_posi[24:29] == 'OCUST':
+                temp.write(
+                    origin_posi[:24] +
+                    'MHOUS' +               # force original account to net
+                    origin_posi[29:] + 
+                    
+                    origin_posi[:4] +
+                    'Sum'.ljust(20," ") +
+                    'MHOUS'+                # force sum account to net
+                    origin_posi[29:]
+                )
+            elif origin_posi.startswith('2'):
+                temp.write(
+                    origin_posi + 
+
+                    # add new row for Sum account
+                    origin_posi[:4] +
+                    'Sum'.ljust(20," ") + 
+                    origin_posi[24:]
+                )
+            else:
+                temp.write(origin_posi)
+        
+        # loop through sum_bpins_list, write record type 5 for position txt
+        for sumPos in sum_bpins_list:
+            temp.write(
+                "5" + 
+                sumPos['bp'] + 
+                'Sum'.ljust(20," ") + 
+                'NZX'.ljust(5," ") +
+                sumPos['ins'] + 
+                ("-" if sumPos['position'] < 0 else "0") +
+                str(abs(sumPos['position'])).rjust(7,"0") + 
+                "\n"
+            )
+
+# 9. write instruction to tell SPAN calculating margin, then save report.  
+### 9.1. write instruction in txt file, for margin calculation purpose. Remove identifier variable as this script only use for margin calculation
+def margin_SPAN_instruction(pa2_pa2,position_txt,span_spn,spanit_txt):
+    with open(spanit_txt + "margin.txt", "w") as f:  # open SPAN instruction txt file in write mode
+        f.write ("Load " + pa2_pa2 + "\n")   # load original pa2
+        f.write ("Load " + position_txt + "\n")  # load position file. Since we calculate for Sum account as well, we currently insert Sum position txt file here
+        f.write ("Calc" + "\n") # calculate
+        f.write ("Save " + span_spn + "margin.spn" + "\n") # save as spn file 
+    return spanit_txt
+
+### 9.2. write instruction in txt file, for risk capital calculation purpose. 
+def rc_SPAN_instruction(new_pa2,whatif_xml,position_txt,span_spn,spanit_txt):
+    with open(spanit_txt + "rc.txt", "w") as f:
+        f.write("Load " + new_pa2 + "\n")
+        f.write("Load " + position_txt + "\n") 
+        f.write("SelectPointInTime" + "\n")
+        f.write("ApplyWhatIf " + whatif_xml + "\n")
+        f.write("CalcRiskArray" + "\n")
+        f.write("Calc" + "\n")
+        f.write("Save " + span_spn + "rc.spn\n")    
+    return spanit_txt
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -654,3 +753,8 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     position_list = read_position(position_txt)
 
     (sum_bpins_list, option_position_list, sum_bpacc_list) = parse_position(position_list)
+
+    #8. write new position file with sum position. For rc sum position file, for any omnibus client to house account
+    write_sum_position_txt(position_list,sum_bpins_list,sum_position_txt)
+
+    write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt)

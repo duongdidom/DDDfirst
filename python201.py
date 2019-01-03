@@ -819,10 +819,10 @@ def parse_position(position_list):
             'position':bpins['position']    # position per instrument
             })
 
-    print ("sum bp instrument with position")
-    for l in sum_bpins_list: print (l)
-    print ("option position list, sum account")
-    for l in option_position_list: print (l)
+    # print ("sum bp instrument with position")
+    # for l in sum_bpins_list: print (l)
+    # print ("option position list, sum account")
+    # for l in option_position_list: print (l)
 
     return sum_bpins_list, option_position_list, sum_bpacc_list
 
