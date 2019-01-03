@@ -301,6 +301,7 @@ def calc_newscan(price_list, instrument_list, rc_scan_list):
                         'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']   # = dsp converted * rc_scan_rate
                     })
                     bUpdate = True
+                    break
             elif instru['instype'] == 'OOP':
                 if instru['comm'] == price['comm'] and instru['maturity'] == price['maturity'] and price['instype'] == 'PHY':
                     instru.update({
@@ -308,6 +309,7 @@ def calc_newscan(price_list, instrument_list, rc_scan_list):
                         'rc_scan_range':price['dsp']/(10**price['dspdl'])*instru['cvf']*price['rc_scan_rate']
                     })
                     bUpdate = True
+                    break
         if not bUpdate:
             print (instru['comm'] + " " + instru['instype'] + " not updated")
 
@@ -741,6 +743,60 @@ def call_SPAN_report(spn,pbreq_csv):
         output_csv = csv.writer(output)
         output_csv.writerows(pbreq_reader)
 
+# 10. calculate delta adjusted net exposure for options
+def delta_adjust(option_list, deltascale_list, price_param_list,instrument_list, option_position_list, sum_bpacc_list):
+    ### 10.1. loop through option list, originally from pa2 file
+    # add new column for each option row
+    # - delta scaling factor <-- from delta scale list
+    # - decimal locator, strike, contract size ... <-- from price param list
+    # - dsp of underlying <-- from instrument list
+    for option in option_list: 
+        # a.
+        bAppendeddelta = False
+        for delta in deltascale_list:
+            if option['comm'] == delta ['comm'] and option['instype'] == delta['instype'] and option['maturity'] == delta['maturity']:
+                option['deltasf'] = delta['deltasf']
+                bAppendeddelta = True
+        if not bAppendeddelta: 
+            option['deltasf'] = 'N/A'
+
+        # b.
+        bAppendedpara = False
+        for param in price_param_list:
+            if option['comm'] == param['comm'] and option['instype'] == param['instype']:
+                option.update({
+                    'dspdl':param['dspdl'],
+                    'strikedl':param['strikedl'],
+                    'strikeconv':float(option['strike'])/10**param['strikedl'],     # strike price after considering decimal locator
+                    'cvf':param['cvf'],
+                    'curr':param['curr']
+                })
+                bAppendedpara = True
+        if not bAppendedpara:
+            option.update({
+                'dspdl':'N/A',
+                'strikedl':'N/A',
+                'strikeconv':'N/A',     # strike price after considering decimal locator
+                'cvf':'N/A',
+                'curr':'N/A'
+                })
+
+        # c.
+        bAppendeddsp = False
+        for instrument in instrument_list:
+            if option['comm'] == instrument['comm'] and option['instype'] == instrument['instype'] and option['maturity'] == instrument['maturity']:
+                option['underlyingdspconv'] = instrument['dspconv']
+                
+
+
+    ### 10.2. loop through option position list, originally from position txt
+    # add new column for each row
+    # delta, underlying dsp, delta net adjust <-- from option list
+
+    ### 10.3. loop through sum bp account list
+    # add column "delta long option value minus short option value" = 'deltalovsov'
+
+    return option_position_list, sum_bpacc_list
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -793,3 +849,7 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     call_SPAN_report(span_rc_spn, pbreq_rc_csv)
 
     #10. calculate delta adjusted net exposure for options
+    (option_position_list, sum_bpacc_list) = delta_adjust(
+        option_list, deltascale_list, price_param_list,instrument_list,         # from pa2 file
+        option_position_list, sum_bpacc_list    # from position 
+        )
