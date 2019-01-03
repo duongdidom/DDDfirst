@@ -831,12 +831,98 @@ def delta_adjust(option_list, deltascale_list, price_param_list,instrument_list,
         
         account['deltalovsov'] = deltalovsov    # update delta lov sov for the account
 
-    print ("sum bp account list with delta adj long opt - short opt")
-    for l in sum_bpacc_list: print (l)
     return option_position_list, sum_bpacc_list
 
 #11. read house csv file and store in a list
 def read_house(house_csv):
+    house_list = []     # create empty house list
+
+    with open (house_csv, 'r') as temp:
+        house_reader = list(csv.reader(temp))
+    
+    for r in house_reader:
+        house_list.append({
+            'bp':str(r[0].strip()),
+            'bpid':str(r[1].strip()),
+            'acc':str(r[2].strip())
+        })
+
+    return house_list
+
+#12. read pbreq margin and pbreq rc files. Combine both to pbreq_list
+def read_pbreqs(pbreq_margin_csv, pbreq_rc_csv):
+    # 12.1. open each pbreq csv files store every row in the csv into a dictionary
+    # column heading will be key in the dictionary
+    with open (pbreq_margin_csv, 'r') as f:
+        pbreq_margin = [{k: v for k,v in row.items()} for row in csv.DictReader(f)]
+    with open (pbreq_rc_csv, 'r') as f:
+        pbreq_rc = [{k: v for k,v in row.items()} for row in csv.DictReader(f)]
+
+    # 12.2. loop through pbreq margin & rc list. Fill up pbreq and curval lists
+    # append identifier margin or rc when looping each list
+    pbreq_list = []
+    curval_list = []    # curval is just to grab long future value minus short future value
+    ### a. loop pbreq margin
+    for r in pbreq_margin:
+        if r['node'] == 'curReq' and r['ec'] == 'NZX' and str(r['isM']) == '1':
+        # unsure what isM = 1 is any different than 0 ?????????
+            pbreq_list.append({
+                'identifier':"margin",  # identifier for margin
+                'bp':r['firm'],
+                'acc':r['acct'],
+                'curr':r['currency'],
+                'span':max(float(r['spanReq'])-float(r['anov']),0)    
+                # span requirement = max( span req - net option value, 0 )
+            })
+        elif r['node'] == 'curVal' and r['ec'] == 'NZX':
+            curval_list.append({
+                'identifier':"margin",  # identifier for margin
+                'bp':r['firm'],
+                'acc':r['acct'],
+                'curr':r['currency'],
+                'lfvsfv':float(r['lfv']) - float(r['sfv'])
+                # long future value minus short future value
+            })
+    
+    ### b. loop pbreq margin
+    for r in pbreq_rc:
+        if r['node'] == 'curReq' and r['ec'] == 'NZX' and str(r['isM']) == '1':
+        # unsure what isM = 1 is any different than 0 ?????????
+            pbreq_list.append({
+                'identifier':"rc",  # identifier for rc
+                'bp':r['firm'],
+                'acc':r['acct'],
+                'curr':r['currency'],
+                'span':max(float(r['spanReq'])-float(r['anov']),0)    
+                # span requirement = max( span req - net option value, 0 )
+            })
+        elif r['node'] == 'curVal' and r['ec'] == 'NZX':
+            curval_list.append({
+                'identifier':"rc",  # identifier for rc
+                'bp':r['firm'],
+                'acc':r['acct'],
+                'curr':r['currency'],
+                'lfvsfv':float(r['lfv']) - float(r['sfv'])
+                # long future value minus short future value
+            })
+
+    # 12.3. add column lfvsfv from curval list into pbreq list
+    for pbreq in pbreq_list:
+        for curval in curval_list:
+            if (pbreq['identifier'] == curval['identifier'] and
+            pbreq['bp'] == curval['bp'] and 
+            pbreq['acc'] == curval['acc'] and
+            pbreq['curr'] == curval['curr']):   # find matching identifier, bp, acc, currency
+                pbreq['lfvsfv'] = curval['lfvsfv']
+
+    for l in pbreq_list: print (l)
+    print ("A")
+    return pbreq_list
+
+#13. retrieve from pbreq list, bp account with sum a/c list, house list, currency list. Generate final rc based on our criteria rule
+def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
+    
+    return pbreq_list, sum_bpacc_list
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -877,16 +963,16 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
 
     write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt)
 
-    # #9. calculate and get report for:
-    # ### margin
-    # margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_margin_spn,spanInstr_margin_txt) # write txt instruction for SPAN calculation: margin
-    # call_SPAN(spanInstr_margin_txt)
-    # call_SPAN_report(span_margin_spn, pbreq_margin_csv)
+    #9. calculate and get report for:
+    ### margin
+    margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_margin_spn,spanInstr_margin_txt) # write txt instruction for SPAN calculation: margin
+    call_SPAN(spanInstr_margin_txt)
+    call_SPAN_report(span_margin_spn, pbreq_margin_csv)
     
-    # ### risk capital
-    # rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_rc_spn,spanInstr_rc_txt)    # write txt instruction for SPAN calculation: risk capital
-    # call_SPAN(spanInstr_rc_txt)
-    # call_SPAN_report(span_rc_spn, pbreq_rc_csv)
+    ### risk capital
+    rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_rc_spn,spanInstr_rc_txt)    # write txt instruction for SPAN calculation: risk capital
+    call_SPAN(spanInstr_rc_txt)
+    call_SPAN_report(span_rc_spn, pbreq_rc_csv)
 
     #10. calculate delta adjusted net exposure for options
     (option_position_list, sum_bpacc_list) = delta_adjust(
@@ -897,12 +983,12 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     #11. read cons house file
     house_list = read_house(house_csv)
 
-    #12. read pbreq margin and pbreq risk capital files
-    pbreq_list = read_pbreqs(pbreq_csv)
+    #12. read pbreq margin and pbreq risk capital files. And combine them into pbreq list
+    pbreq_list = read_pbreqs(pbreq_margin_csv, pbreq_rc_csv)
 
     #13. use criteria rule to generate risk capital for each participant
-    pbreq_list, sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+    (pbreq_list, sum_bpacc_list) = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
     
-    #14. write final excel file
-    write_rc(sum_bpacc_list,final_csv)
-    print ("\n complete")
+    # #14. write final excel file
+    # write_rc(sum_bpacc_list,final_csv)
+    # print ("\n complete")
