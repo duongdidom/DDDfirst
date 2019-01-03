@@ -786,17 +786,57 @@ def delta_adjust(option_list, deltascale_list, price_param_list,instrument_list,
         for instrument in instrument_list:
             if option['comm'] == instrument['comm'] and option['instype'] == instrument['instype'] and option['maturity'] == instrument['maturity']:
                 option['underlyingdspconv'] = instrument['dspconv']
-                
-
+                bAppendeddsp = True
+        if not bAppendeddsp:
+            option['underlyingdspconv'] = 'N/A'
 
     ### 10.2. loop through option position list, originally from position txt
     # add new column for each row
     # delta, underlying dsp, delta net adjust <-- from option list
+    for optionPos in option_position_list:
+        bAppendedposition = False
+        for option in option_list:
+            if (optionPos['comm'] == option['comm'] and 
+            optionPos['instype'] == option['instype'] and 
+            optionPos['callput'] == option['callput'] and 
+            optionPos['maturity'] == option['maturity'] and 
+            optionPos['strikeconv'] == option['strikeconv']):
+            # find matching commodity, instrument type, call/put, maturity, strike
+                optionPos.update({
+                    'delta':float(option['delta'])/option['deltasf'],
+                    'underlyingdspconv':option['underlyingdspconv'],
+                    'deltanetadj':optionPos['position']*(float(option['delta'])/option['deltasf'])*option['underlyingdspconv'],
+                    # delta net adj = position * (delta/delta scale factor) * underlying dsp converted
+                    'curr':option['curr']
+                })
+                bAppendedposition = True
+        if not bAppendedposition:
+            optionPos.update({
+                'delta':"NA",
+                'underlyingdspconv':"NA",
+                'deltanetadj':"NA",
+                'curr':"NA"
+            })
 
     ### 10.3. loop through sum bp account list
     # add column "delta long option value minus short option value" = 'deltalovsov'
+    for account in sum_bpacc_list:
+        deltalovsov = float(0)  # define variable for delta long option value minus short option value
+        for optionPos in option_position_list:
+            if (account['bpacc'].startswith(optionPos['bp']) and
+            account['bpacc'][3:] == optionPos['acc'] and
+            account['curr'] == optionPos['curr']):
+            # find matching bp, account, currency
+                deltalovsov += optionPos['deltanetadj']     # totalling all delta net adjusted under same bp, account and currency
+        
+        account['deltalovsov'] = deltalovsov    # update delta lov sov for the account
 
+    print ("sum bp account list with delta adj long opt - short opt")
+    for l in sum_bpacc_list: print (l)
     return option_position_list, sum_bpacc_list
+
+#11. read house csv file and store in a list
+def read_house(house_csv):
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -837,19 +877,32 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
 
     write_sum_rc_position_txt(position_list,sum_bpins_list,sum_position_rc_txt)
 
-    #9. calculate and get report for:
-    ### margin
-    margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_margin_spn,spanInstr_margin_txt) # write txt instruction for SPAN calculation: margin
-    call_SPAN(spanInstr_margin_txt)
-    call_SPAN_report(span_margin_spn, pbreq_margin_csv)
+    # #9. calculate and get report for:
+    # ### margin
+    # margin_SPAN_instruction(pa2_pa2,sum_position_txt,span_margin_spn,spanInstr_margin_txt) # write txt instruction for SPAN calculation: margin
+    # call_SPAN(spanInstr_margin_txt)
+    # call_SPAN_report(span_margin_spn, pbreq_margin_csv)
     
-    ### risk capital
-    rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_rc_spn,spanInstr_rc_txt)    # write txt instruction for SPAN calculation: risk capital
-    call_SPAN(spanInstr_rc_txt)
-    call_SPAN_report(span_rc_spn, pbreq_rc_csv)
+    # ### risk capital
+    # rc_SPAN_instruction(new_pa2,whatif_xml,sum_position_rc_txt,span_rc_spn,spanInstr_rc_txt)    # write txt instruction for SPAN calculation: risk capital
+    # call_SPAN(spanInstr_rc_txt)
+    # call_SPAN_report(span_rc_spn, pbreq_rc_csv)
 
     #10. calculate delta adjusted net exposure for options
     (option_position_list, sum_bpacc_list) = delta_adjust(
         option_list, deltascale_list, price_param_list,instrument_list,         # from pa2 file
         option_position_list, sum_bpacc_list    # from position 
         )
+    
+    #11. read cons house file
+    house_list = read_house(house_csv)
+
+    #12. read pbreq margin and pbreq risk capital files
+    pbreq_list = read_pbreqs(pbreq_csv)
+
+    #13. use criteria rule to generate risk capital for each participant
+    pbreq_list, sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+    
+    #14. write final excel file
+    write_rc(sum_bpacc_list,final_csv)
+    print ("\n complete")
