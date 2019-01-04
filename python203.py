@@ -915,13 +915,100 @@ def read_pbreqs(pbreq_margin_csv, pbreq_rc_csv):
             pbreq['curr'] == curval['curr']):   # find matching identifier, bp, acc, currency
                 pbreq['lfvsfv'] = curval['lfvsfv']
 
-    for l in pbreq_list: print (l)
-    print ("A")
     return pbreq_list
 
 #13. retrieve from pbreq list, bp account with sum a/c list, house list, currency list. Generate final rc based on our criteria rule
 def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
+    # pbreq list <-- pbreq files
+    # sum bp acc list <-- position
+    # house list <-- one of the cons files
+    # currency list <-- pa2 file
+
+    # 13.1. get fx rate
+    for curr in currency_list:
+        if curr['curra'] == "USD" and curr['currb'] == "NZD":
+            usdnzd = curr['rate']
+            
+    # 13.2. loop through each account in sum bp acc list
+    bp_list = []    # first create an empty list to use later on
+    for acc in sum_bpacc_list:
+        ### a. from pbreq list. Add column lfvsfv, stress loss and margin for each account 
+        margin = float(0)  # for each account, reset default value to 0
+        stressl = float(0)  
+        lfvsfv = float(0)
+        for pbreq in pbreq_list:    
+            if (acc['bpacc'].startswith(pbreq['bp']) and 
+            acc['bpacc'].endswith(pbreq['acc']) and 
+            acc['curr'] == pbreq['curr']):
+                if pbreq['identifier'] == 'margin': 
+                # case pbreq row is margin, assign value for margin
+                    margin = float(pbreq['span'])
+                elif pbreq['identifier'] == 'rc':
+                # case pbreq row is rc, assign value for stress loss & lfv sfv
+                # lfv sfv value for margin and rc row should be the same
+                    stressl = float(pbreq['span'])
+                    lfvsfv = float(pbreq['lfvsfv'])
+        # done looping pbreq, update margin, stressloss, flvsfv into acc
+        acc.update({
+            'margin':margin,
+            'stressl':stressl,
+            'lfvsfv':lfvsfv
+        })
+
+        ### b. from house list. Add column acctype for whether account is house/client/sum
+        for house in house_list:
+            if (acc['bpacc'].startswith(house['bp']) and acc['bpacc'].endswith(house['acc'])):
+            # if in the house list (from the cons file), account type is house
+                acc['acctype'] = 'House'
+                break   # exit looping house list
+            elif acc['bpacc'].endswith('Sum'):
+            # if account name end with Sum, account type is sum
+                acc['acctype'] = 'Sum'
+                break   # exit looping house list
+            else:
+                acc['acctype'] = 'Client'
+
+        ### c. Calculate things and insert into sum bp acc list
+        # delta adjusted net exposure = lfv sfv + delta lov sov,
+        # uncovered stress loss = rc = max( (stress loss - margin) , 0),
+        acc['deltanetexps'] = acc['lfvsfv'] + acc['deltalovsov']
+        acc['rc'] = max(acc['stressl'] - acc['margin'], 0)
+        
+        ### d. convert delta adjusted net exposure, margin, stress loss, risk capital to nzd if account currency is yet in nzd
+        if acc['curr'] == 'USD':
+            acc.update({
+                'deltanetexpsconv':acc['deltanetexps']*usdnzd,
+                'rcconv':acc['rc']*usdnzd,
+                'marginconv':acc['margin']*usdnzd,
+                'stresslconv':acc['stressl']*usdnzd
+            })
+        elif acc['curr'] == 'NZD':
+            acc.update({
+                'deltanetexpsconv':acc['deltanetexps'],
+                'rcconv':acc['rc'],
+                'marginconv':acc['margin'],
+                'stresslconv':acc['stressl']
+            })
+
+        ### e. insert first 3 characters from 'bpacc' value into bp list
+        # in order to return an unique list of bp later on
+        bp_list.append(acc['bpacc'][:3])
     
+    # print ("sum bp account list with stressl, margin, delta net adj")
+    # for l in sum_bpacc_list: print (l)
+
+    # 13.3. in bp list, remove duplication
+    # first convert bp_list into set, to remove duplicate data. 
+    # Then convert into list to loop. 
+    # loop through this new list, append value into bp unique list
+    # bp_unique_list looks like [{'bp': 'OMF'}, {'bp': 'FCS'}]
+    bp_unique_list = []
+    for r in list(set(bp_list)):    
+        bp_unique_list.append({'bp':str(r)})
+
+    # 13.4. APPLY RULE BY RISK TEAM
+    
+
     return pbreq_list, sum_bpacc_list
 
 ### MAIN: calculate 21% rc ###
