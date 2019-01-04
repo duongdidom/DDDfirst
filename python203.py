@@ -1006,8 +1006,62 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
     for r in list(set(bp_list)):    
         bp_unique_list.append({'bp':str(r)})
 
-    # 13.4. APPLY RULE BY RISK TEAM
+    # 13.4. APPLY RULE BY RISK TEAM #####################################################
+    # loop through each participant in bp unique list
+    for bp in bp_unique_list:
+        # for each bp, pre define value for delta net exposure, rc for house, long client and short client 
+        longclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}    # dictionary for long client 
+        shortclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}   # dictionary for short client 
+        house = {'deltanetexpsconv':float(0),'rcconv':float(0),'marginconv':float(0)}   # dictionary for house
+        bHouseexist = False  # pre set there is no house accout
+
+        for acc in sum_bpacc_list:  
+        # loop through each account to find all accounts of the bp, except Sum account.
+        # Sum account will be use in final risk capital step
+            if acc['bpacc'].startswith(bp['bp']) and not acc['bpacc'].endswith('Sum'):
+                if acc['acctype'] == 'House' and acc['deltanetexpsconv'] > 0:
+                # house & delta net exposure > 0
+                    house['deltanetexpsconv'] += acc['deltanetexpsconv']    # total all delta net exposure for the same house account. Since the value has been converted
+                    house['rcconv'] += acc['rcconv']    # total all rc for same house account
+                    house['marginconv'] += acc['marginconv']    # total all margin for same house account
+                    bHouseexist = True
+                elif acc['acctype'] == 'Client' and acc['deltanetexpsconv'] > 0: 
+                # client & delta net exposure > 0
+                    longclient['deltanetexpsconv'] += acc['deltanetexpsconv']   # total all delta net exposure for net short account
+                    longclient['rcconv'] += acc['rcconv']   # total all rc for net long account
+                elif acc['acctype'] == 'Client' and acc['deltanetexpsconv'] < 0:
+                # client and delta net exposure < 0
+                    shortclient['deltanetexpsconv'] += acc['deltanetexpsconv']   # total all delta net exposure for net short account
+                    shortclient['rcconv'] += acc['rcconv']   # total all rc for net short account
+
+        if not bHouseexist:     # if house account don't have any position
+            shortrc = shortclient['rcconv']
+            longrc = longclient['rcconv']
+        elif house['deltanetexpsconv'] > 0: # if house exists & positive delta net exposure
+        # house margin can be used to offset client's rc of opposite sign (i.e. net short client)
+            shortrc = -house['marginconv'] + shortclient['rcconv']
+            longrc = house['rcconv'] + longclient ['rcconv']    # rc of the same positive sign added together 
+        elif house['deltanetexpsconv'] < 0: # if house exists & negative delta net exposure
+        # house margin can be used to offset client's rc of opposite sign (i.e. net positive client)
+            shortrc = house['rcconv'] + shortclient['rcconv']  # rc of the same negative sign added together
+            longrc = -house['marginconv'] + longclient ['rcconv']
+        elif house['deltanetexpsconv'] == 0: # house exists & delta net exposure = 0
+        # add together rc of the same sign
+            shortrc = shortclient['rcconv'] + house['rcconv']
+            longrc = longclient['rcconv'] + house['rcconv']
+        else:   # (not sure what scenario this is, and not sure how we treat this scenario)
+            longrc = shortrc = house['rcconv'] + longclient['rcconv'] + shortclient['rcconv']
+        
+        # applying Risk team rule: bp rc converted = max (long rc & short rc)
+        # add rc converted to bp unique list
+        bp['rcconv'] = max(longrc, shortrc)
     
+    # 13.5. Compare rcconv of rule v.s. rcconv of Sum account for each bp
+
+
+
+
+
 
     return pbreq_list, sum_bpacc_list
 
