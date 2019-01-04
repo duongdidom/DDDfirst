@@ -1009,7 +1009,7 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
     # 13.4. APPLY RULE BY RISK TEAM #####################################################
     # loop through each participant in bp unique list
     for bp in bp_unique_list:
-        # for each bp, pre define value for delta net exposure, rc for house, long client and short client 
+        # for each bp, pre define value for delta net exposure, rc for house, long client and short client. Each takes zero value
         longclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}    # dictionary for long client 
         shortclient = {'deltanetexpsconv':float(0),'rcconv':float(0)}   # dictionary for short client 
         house = {'deltanetexpsconv':float(0),'rcconv':float(0),'marginconv':float(0)}   # dictionary for house
@@ -1056,12 +1056,45 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
         # add rc converted to bp unique list
         bp['rcconv'] = max(longrc, shortrc)
     
-    # 13.5. Compare rcconv of rule v.s. rcconv of Sum account for each bp
+    # print ("bp with rc rule")
+    # for l in bp_unique_list: print (l)
 
+    # 13.5. Final rc = max (rcconv of rule v.s. Total(rcconv of Sum account))
+    for bp in bp_unique_list:
+        ### a. preset default value for each bp
+        totalSum = float(0) 
+        finalrc = float(0)
+        
+        ### b. loop through all accounts to find Sum a/c of the bp
+        # add together rcconv of Sum account, currently it is separated by currency
+        for acc in sum_bpacc_list:        
+            if acc['bpacc'].startswith(bp['bp']) and acc['bpacc'].endswith('Sum'):
+                totalSum += acc['rcconv']
+        
+        ### final rc for each bp
+        finalrc = max(bp['rcconv'] , totalSum)
+        # we find that rc rule will always be used. Since Sum account is more diversified, therefore lower risk capital
 
+        ### append new row into list sum bp acc
+        # Rule: {bp rule, rc rule}        
+        sum_bpacc_list.append({
+            'bpacc':bp['bp']+'Rule',
+            'curr':'NZD',
+            'acctype':'Rule',
+            'rcconv':bp['rcconv']
+        })
+        # Final: {bp final, rc final}
+        sum_bpacc_list.append({
+            'bpacc':bp['bp']+'Final',
+            'curr':'NZD',
+            'acctype':'Final',
+            'rcconv':finalrc
+        })
 
+    # 13.6. loop 
 
-
+    print ("sum bp account list with rule and final rc for each bp")
+    for l in sum_bpacc_list: print (l)
 
     return pbreq_list, sum_bpacc_list
 
