@@ -10,9 +10,9 @@ from shutil import copy2
 from python203 import Calculate_21_rc
 
 """ input """
-parent_dir = r"C:\SPANfiles\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out
+parent_dir = r"C:\Users\DDD\Downloads\Test\201812" # where output of live RiskCapital script is stored. E.g. D:\span\rc\out
 cutoff_time = "22:30:00"
-temp_dir =  r"C:\SPANfiles\temp"    # where files in execution list is copied into
+temp_dir =  r"C:\Users\DDD\Downloads\Test\temp"    # where files in execution list is copied into
 """"""""""""
 cutoff_time = datetime.datetime.strptime(cutoff_time,"%H:%M:%S") # convert cut off time from hh:mm:ss to yyyy-mm-dd hh:mm:ss
 LOG = []    # create an empty list for logging

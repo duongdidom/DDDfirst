@@ -850,6 +850,7 @@ def read_house(house_csv):
     return house_list
 
 #12. read pbreq margin and pbreq rc files. Combine both to pbreq_list
+# pbreq list now will have margin span requiment, lfvsfv at the top. And equivalent amount of data but for rc at the bottom
 def read_pbreqs(pbreq_margin_csv, pbreq_rc_csv):
     # 12.1. open each pbreq csv files store every row in the csv into a dictionary
     # column heading will be key in the dictionary
@@ -1055,6 +1056,7 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
         # applying Risk team rule: bp rc converted = max (long rc & short rc)
         # add rc converted to bp unique list
         bp['rcconv'] = max(longrc, shortrc)
+    ######################################################################################
     
     # print ("bp with rc rule")
     # for l in bp_unique_list: print (l)
@@ -1091,12 +1093,48 @@ def parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list):
             'rcconv':finalrc
         })
 
-    # 13.6. loop 
+    # 13.6. Add bpid column to sum_bpacc_list from cons house
+    for acc in sum_bpacc_list:
+        for house in house_list:
+            if acc['bpacc'].startswith(house['bp']):
+                acc['bpid'] = house['bpid']
+                break
 
-    print ("sum bp account list with rule and final rc for each bp")
-    for l in sum_bpacc_list: print (l)
+    # print ("sum bp account list with rule and final rc for each bp")
+    # for l in sum_bpacc_list: print (l)
 
-    return pbreq_list, sum_bpacc_list
+    return sum_bpacc_list
+
+#14. write final csv
+def write_rc(sum_bpacc_list,final_csv):
+    with open (final_csv, "w") as final:
+        # write heading
+        final.write("BPID,Account,Currency,Delta adjusted net exposure,Stress Losses,Margin,Intermediate RC,Delta adjusted net exposure (NZD), Stress Losses (NZD),Margin (NZD),Intermediate RC (NZD)\n")
+        
+        # write final result
+        for r in sum_bpacc_list:
+            try:
+                final.write(
+                    r['bpid'] + ',' +
+                    r['bpacc'][3:] + ',' +
+                    r['curr'] + ',' +
+                    str(r['deltanetexps']) + ',' +
+                    str(r['stressl']) + ',' +
+                    str(r['margin']) + ',' +
+                    str(r['rc']) + ',' +
+                    str(r['deltanetexpsconv']) + ',' +
+                    str(r['stresslconv']) + ',' +
+                    str(r['marginconv']) + ',' +
+                    str(r['rcconv']) + "\n"
+                )
+            except KeyError:    # case row in sum bp acc list has some empty value column 
+                final.write(
+                    r['bpid'] + ',' +
+                    r['bpacc'][3:] + ',' +
+                    r['curr'] + ',' +
+                    ',,,,,,,' +     # write empty value for those column as well
+                    str(r['rcconv']) + "\n"
+                )              
 
 ### MAIN: calculate 21% rc ###
 def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_scan_csv, cons_rc_intermonth_csv, cons_rc_intercomm_csv, cons_house_csv):
@@ -1161,8 +1199,8 @@ def Calculate_21_rc(input_dir, out_timestamp, pa2_pa2, position_txt, cons_rc_sca
     pbreq_list = read_pbreqs(pbreq_margin_csv, pbreq_rc_csv)
 
     #13. use criteria rule to generate risk capital for each participant
-    (pbreq_list, sum_bpacc_list) = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
+    sum_bpacc_list = parse_rc(pbreq_list,sum_bpacc_list,house_list,currency_list)
     
-    # #14. write final excel file
-    # write_rc(sum_bpacc_list,final_csv)
-    # print ("\n complete")
+    #14. write final excel file
+    write_rc(sum_bpacc_list,final_csv)
+    print ("\n complete")
