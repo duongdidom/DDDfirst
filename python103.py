@@ -86,7 +86,7 @@
 ############################################################################################################################################################################
 # working with datetime module
 # useful link: https://www.w3schools.com/python/python_datetime.asp
-from datetime import timedelta, date
+from datetime import timedelta, date, datetime
 
 start_date = date(2013, 1, 1)
 end_date = date(2013, 1, 10)
@@ -94,7 +94,7 @@ end_date = date(2013, 1, 10)
 for x in range(0, (end_date-start_date).days):  # loop from 0 to number of days from start date to end date. 
                                                 # range() function excludes end date
         print (start_date + timedelta(x))       # for each loop, convert x from inteter to date using timedelta. Plus that number to start date
-x = datetime.datetime(2018, 6, 1)
+x = datetime(2018, 6, 1)
 
 print(x.strftime("%Y%m"))
 
