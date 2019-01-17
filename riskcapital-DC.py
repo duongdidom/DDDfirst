@@ -24,15 +24,15 @@ Final Output
   to parse_rc logic (.csv)
 """
 
-from __future__ import division
-import copy
-import csv
-import datetime
-import glob
-import logging
-import os
+from __future__ import division #
+import copy#
+import csv#
+import datetime#
+import glob#
+import logging#
+import os#
 import shutil
-import subprocess
+import subprocess#
 
 import smtplib
 from email.mime.multipart import MIMEMultipart
