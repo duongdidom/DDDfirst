@@ -17,6 +17,7 @@ first lesson
 
 # 102:
 cognitive class - python for data science
+
 ├── data type: int, float, str
 
 ├── tuple, list, set, dictionary
