@@ -437,5 +437,109 @@
 # plt.plot (x,y)
 # plt.show()      # graph the function
 
+############################################################################################################################################################################
+"""
+try, except, else, finally
+"""
 
 
+def try_except_else_finally():
+    # test for anything inside try if return any error
+    try:
+        x = 1  # x=x+1 would yield error because x has not yet been defined
+    # if return any error, run whatever inside except below
+    except:
+        x = "error in try"
+    # if anything inside try does not return any error, run whatever inside else below
+    else:
+        x = x + 999
+    # always run whatever inside finnaly below, regardless whether try return error or not. I.e. after running except or else
+    finally:
+        print(x)
+
+
+######################################################################
+r""" 
+regular expression, RegEx
+find certain pattern in given string
+
+identifier:
+\d = any number
+\D = anything but number 
+\s = space
+\S = anything but space
+\w = letter
+\W = anything but letter
+. any character except new line
+\b = spaces around words
+\. = period '.'
+
+modifier:
+\d{1,5} = any number that has 1-5 digits. E.g 1234, 99, 433. But not 123456
++ = matches 1 or more
+? = matches 0 or 1
+* = matches 0 ore more
+$ = match end of string
+^ = match start of string
+| = match either or. E.g. a|b = match a or b
+[a-zA-Z]... = find any lowercase letter from a-z and uppercase from A-Z
+{x} = x amount of preceding code
+
+white space character:
+\n = new line
+\s = space 
+\t = tab
+\e = escape
+\r = carriage return
+\f = form feed
+
+escape required '\'
+. + * ? [] $ ^ () {} | \ /
+"""
+
+
+def regular_expression():
+    # example string
+    str_example = '</P><A HREF="https://msdn2.microsoft.com">MSDN Home Page</A></P><A HREF="http://www.microsoft.com">Microsoft Corporation Home Page</A></P><A HREF="http://blogs.msdn.com/bclteam">.NET Base Class Library blog</A></P><A HREF="https://gmail-google.net/login">Login page Gmail by Google</A></P>'
+
+    # find all url after A HREF=\
+    r"""
+    http = 'http' word
+    s? = 0 or 1 letter s
+    :// = colon, forward slash, forward slash characters
+    [a-z\d]+ = one or more letter and number by however length
+    .? = zero or one period '.' character
+    -? = one or more dash '-' character
+    \w*\d* = any letter and number by however length
+    \. = period '.' character 
+    [a-z0-9]* = any letter and number by however length
+    \/? = zero or one forward slash character
+    """
+    str_URL = re.findall(
+        r"https?://[a-z\d]+.?-?\w*\d*\.[a-z0-9]*\/?[a-z0-9]*", str_example
+    )
+
+    print(str_URL)
+
+
+############################################################################################################################################################################
+# working with datetime module
+# useful link: https://www.w3schools.com/python/python_datetime.asp
+from datetime import timedelta, date, datetime
+
+start_date = date(2013, 1, 1)
+end_date = date(2013, 1, 10)
+
+for x in range(0, (end_date-start_date).days):  # loop from 0 to number of days from start date to end date. 
+                                                # range() function excludes end date
+        print (start_date + timedelta(x))       # for each loop, convert x from inteter to date using timedelta. Plus that number to start date
+x = datetime(2018, 6, 1)
+
+print(x.strftime("%Y%m"))
+
+
+############################################################################################################################################################################
+# 17 function enumerate() generate index number for each item in a list. Could be useful for looping
+seasons = ['Spring', 'Summer', 'Fall', 'Winter']
+for l in enumerate(seasons): print (l)
+for l in enumerate(seasons): print (str(l[0]) + " = " + l[1])
