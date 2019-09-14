@@ -249,7 +249,7 @@ default_variable ()     # = positive. call function where variable is ommitted. 
 
 ###########################################################################################################################################################################
 # 13 # class: contains data attributes and methods attributes
-start with class & class name & '(' & class parent & ')'
+# start with class & class name & '(' & class parent & ')'
 class circle (object):
     def __init__ (self, radius, color):     # _in-it_() function stand for initialise constructor: to tell python to make new class.
                                             # self parameter = new created instance of class
@@ -430,7 +430,7 @@ u = np.array([0, 144 , np.pi])     # assign value for array u
 u_sqrt = np.sqrt(u)      # u_sin is a function of variable u
 u_sqrt       # = array([0. , 12. , 1.77245385]) = calculate square root for every value in array u
 np.linspace(-2,3,8)    # linspace() return evenly space numbers over specified interval. 1st value = starting point, 2nd value = ending point, 3rd value = number of samples
-generate 100 values from 0 to 2*pi >>> create function sin of those values >>> plot that sin function
+# generate 100 values from 0 to 2*pi >>> create function sin of those values >>> plot that sin function
 x = np.linspace(0,2*np.pi,100)
 y = np.sin(x)
 import matplotlib.pyplot as plt
