@@ -28,7 +28,7 @@ cognitive class - python for data science
 # 103: 
 Learn Python - Full Course for Beginners : 4 hours course
 
-# Al Sweigart - Automate the Boring Stuff
+# Al Sweigart - Automate the Boring Stuff:
 
 # 104:
 documenting and refactoring python code
